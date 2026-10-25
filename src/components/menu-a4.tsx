@@ -2,9 +2,10 @@
 
 import { Clock, Globe, Phone } from "lucide-react";
 import { forwardRef } from "react";
-import { A4, type MenuPage, type MenuRow } from "@/lib/menu";
+import { A4, BODY_H, type MenuPage, type MenuRow } from "@/lib/menu";
 import { fmtPriceNote } from "@/lib/trend";
 import type { ShopSettings } from "@/lib/types";
+import { artFor, IllustrationScene } from "./illustrations";
 import { RecycleMark } from "./recycle-mark";
 
 type Props = {
@@ -72,7 +73,7 @@ export const MenuA4Page = forwardRef<HTMLDivElement, Props>(function MenuA4Page(
       </header>
 
       {/* body */}
-      <main className="relative flex-1 px-9" style={{ paddingTop: A4.bodyPadY, paddingBottom: A4.bodyPadY }}>
+      <main className="relative flex flex-1 flex-col px-9" style={{ paddingTop: A4.bodyPadY, paddingBottom: A4.bodyPadY }}>
         {page.blocks.map((b, i) => (
           <section key={i} style={{ marginBottom: A4.blockGap }}>
             <div style={{ height: A4.pill, marginBottom: A4.pillGap }} className="flex items-center justify-center gap-4 rounded-full bg-gradient-to-r from-[#3a9e1d] via-[#4fae2f] to-[#64b947] text-white shadow-[0_10px_24px_-12px_rgba(58,158,29,0.7)]">
@@ -94,6 +95,14 @@ export const MenuA4Page = forwardRef<HTMLDivElement, Props>(function MenuA4Page(
             </div>
           </section>
         ))}
+        {/* fill the leftover space at the bottom of the page with illustrations */}
+        <div className="mt-auto">
+          <IllustrationScene
+            width={A4.width - 72}
+            height={Math.min(BODY_H - page.used, 380)}
+            art={artFor(page.blocks.map((b) => b.mainName))}
+          />
+        </div>
       </main>
 
       {/* footer */}

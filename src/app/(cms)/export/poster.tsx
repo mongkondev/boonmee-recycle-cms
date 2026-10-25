@@ -2,6 +2,7 @@
 
 import { Clock, Globe, Phone } from "lucide-react";
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
+import { artFor, IllustrationScene } from "@/components/illustrations";
 import { RecycleMark } from "@/components/recycle-mark";
 import { priceLabel, trendOf } from "@/lib/trend";
 import type { ProductRow, ShopSettings } from "@/lib/types";
@@ -32,7 +33,9 @@ export type PosterData = {
 export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: ShopSettings; qr: string | null; options: PosterOptions }>(
   function Poster({ data, settings, qr, options }, ref) {
     const bodyRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(MAX_SCALE);
+    const [free, setFree] = useState(0);
     const total = data.sections.reduce((a, s) => a + s.items.length, 0);
     const twoCol = options.columns === "auto" ? total > 14 : options.columns === 2;
 
@@ -46,6 +49,12 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
       const tooTall = el.scrollHeight > el.clientHeight + 1;
       const tooWide = [...el.querySelectorAll("li")].some((li) => li.scrollWidth > li.clientWidth + 1);
       if (tooTall || tooWide) setScale((s) => Math.max(MIN_SCALE, +(s - 0.04).toFixed(2)));
+    }, [scale, data, options]);
+    // once the type size settles, whatever height is left below the list goes to illustrations
+    useLayoutEffect(() => {
+      const el = bodyRef.current;
+      const list = listRef.current;
+      if (el && list) setFree(Math.max(0, el.clientHeight - list.offsetHeight - 24));
     }, [scale, data, options]);
 
     const phones = settings.phones.split(",").map((s) => s.trim()).filter(Boolean);
@@ -107,6 +116,7 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
         {/* menu items, grouped by sub category */}
         <div ref={bodyRef} className="relative mx-10 mt-6 min-h-0 flex-1 overflow-hidden">
           <div
+            ref={listRef}
             style={{ fontSize: 34 * scale, columnCount: twoCol ? 2 : 1, columnGap: 28 }}
             className="h-fit"
           >
@@ -147,6 +157,9 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
                 </ul>
               </section>
             ))}
+          </div>
+          <div className="absolute inset-x-0 bottom-0">
+            <IllustrationScene width={POSTER_W - 80} height={Math.min(free, 420)} art={artFor([data.mainName])} />
           </div>
         </div>
 

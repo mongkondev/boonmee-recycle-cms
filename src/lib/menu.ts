@@ -52,11 +52,12 @@ export const A4 = {
   blockGap: 30,
   row: 38,
 };
-const BODY_H = A4.height - A4.header - A4.footer - A4.bodyPadY * 2;
+export const BODY_H = A4.height - A4.header - A4.footer - A4.bodyPadY * 2;
 
 export type MenuRow = { kind: "sub"; name: string } | { kind: "item"; item: MenuItem };
 export type MenuBlock = { mainName: string; continued: boolean; columns: [MenuRow[], MenuRow[]] };
-export type MenuPage = { blocks: MenuBlock[] };
+/** `used` = body height taken by blocks (px); the rest is free for illustrations */
+export type MenuPage = { blocks: MenuBlock[]; used: number };
 
 const blockHeight = (rows: number) => A4.pill + A4.pillGap + Math.ceil(rows / 2) * A4.row + A4.blockGap;
 const rowsOf = (subs: MenuSub[], showSub: boolean): MenuRow[] =>
@@ -99,7 +100,7 @@ function chunkMain(main: MenuMain, showSub: boolean): MenuRow[][] {
 }
 
 export function paginate(menu: MenuSnapshot, showSub = true): MenuPage[] {
-  const pages: MenuPage[] = [{ blocks: [] }];
+  const pages: MenuPage[] = [{ blocks: [], used: 0 }];
   let used = 0;
   for (const main of menu.mains) {
     const rows = rowsOf(main.subs, showSub);
@@ -108,11 +109,12 @@ export function paginate(menu: MenuSnapshot, showSub = true): MenuPage[] {
       const h = blockHeight(chunk.length);
       // whole category moves to the next page when it does not fit what is left
       if (used + h > BODY_H + A4.blockGap && pages.at(-1)!.blocks.length) {
-        pages.push({ blocks: [] });
+        pages.push({ blocks: [], used: 0 });
         used = 0;
       }
       pages.at(-1)!.blocks.push({ mainName: main.name, continued: i > 0, columns: toColumns(chunk) });
       used += h;
+      pages.at(-1)!.used = used;
     });
   }
   return pages;

@@ -11,7 +11,9 @@ export const fmtPrice = (n: number) =>
   n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 /** Numbers inside a free-text price such as "3000-30000" or "100+" get thousands separators. */
-export const fmtPriceNote = (note: string) => note.replace(/\d+(?:\.\d+)?/g, (n) => fmtPrice(Number(n)));
+// numbers may already carry separators ("3,000"), so commas are part of the match and stripped first
+export const fmtPriceNote = (note: string) =>
+  note.replace(/\d[\d,]*(?:\.\d+)?/g, (n) => fmtPrice(Number(n.replace(/,/g, ""))));
 
 export const priceLabel = (p: { price: number; priceNote: string | null }) =>
   p.priceNote ? fmtPriceNote(p.priceNote) : fmtPrice(p.price);
