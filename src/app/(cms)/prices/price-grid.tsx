@@ -127,9 +127,10 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, row: ProductRow) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      // move first so typing can continue while the save is in flight
+      // moving focus blurs this input, and onBlur saves it; on the first/last row nothing moves
+      const input = e.currentTarget;
       focusRow(row.id, e.shiftKey ? -1 : 1);
-      void save(row.id);
+      if (document.activeElement === input) void save(row.id);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       focusRow(row.id, 1);
@@ -207,7 +208,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
         </div>
       </Card>
 
-      <p className="px-1 text-xs text-amber-600 md:hidden">แก้ราคาแล้วกด “ถัดไป” บนคีย์บอร์ดเพื่อบันทึกร่าง · ราคาจะเปลี่ยนจริงเมื่อกด Publish</p>
+      <p className="px-1 text-xs text-amber-600 md:hidden">แก้ราคาแล้วกด “ถัดไป” หรือแตะออกจากช่องเพื่อบันทึกร่าง · ราคาจะเปลี่ยนจริงเมื่อกด Publish</p>
       <div className="hidden flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-500 md:flex">
         <span className="flex items-center gap-1">
           <Kbd>
@@ -215,6 +216,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
           </Kbd>
           บันทึกร่าง + แถวถัดไป
         </span>
+        <span>คลิกออกจากช่อง = บันทึกร่างทันที</span>
         <span><Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> บันทึกร่าง + แถวก่อนหน้า</span>
         <span className="text-amber-600">ราคาจะเปลี่ยนจริงเมื่อกด Publish</span>
         <span><Kbd>↑</Kbd><Kbd>↓</Kbd> เลื่อนแถว</span>
@@ -322,6 +324,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                         onValueChange={(v) => setDrafts((d) => ({ ...d, [r.id]: v }))}
                         onKeyDown={(e) => onKeyDown(e, r)}
                         onFocus={(e) => e.currentTarget.select()}
+                        onBlur={() => void save(r.id)}
                         enterKeyHint="next"
                         aria-label={`ราคา ${r.title}`}
                         className={cn(
