@@ -21,15 +21,15 @@ export default async function HistoryPage() {
         }
       />
       <Card className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
             <tr>
-              <th className="px-4 py-3">วันเวลา</th>
+              <th className="hidden px-4 py-3 sm:table-cell">วันเวลา</th>
               <th className="px-3 py-3">สินค้า</th>
-              <th className="px-3 py-3 text-right">ราคาเดิม</th>
+              <th className="hidden px-3 py-3 text-right md:table-cell">ราคาเดิม</th>
               <th className="px-3 py-3 text-right">ราคาใหม่</th>
               <th className="px-3 py-3">เปลี่ยนแปลง</th>
-              <th className="px-4 py-3">โดย</th>
+              <th className="hidden px-4 py-3 lg:table-cell">โดย</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -38,17 +38,18 @@ export default async function HistoryPage() {
             )}
             {rows.map((r) => (
               <tr key={r.id} className="hover:bg-slate-50/70">
-                <td className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-500">{fmtDate(r.changedAt)}</td>
+                <td className="hidden px-4 py-2.5 text-xs whitespace-nowrap text-slate-500 sm:table-cell">{fmtDate(r.changedAt)}</td>
                 <td className="px-3 py-2.5">
                   <Link href={`/products/${r.productId}`} className="font-medium text-slate-800 hover:text-brand-600">{r.title}</Link>
                   <div className="text-xs text-slate-400">{r.mainName}{r.subName && ` › ${r.subName}`}</div>
+                  <div className="text-xs text-slate-400 sm:hidden">{fmtDate(r.changedAt)}</div>
                 </td>
-                <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">{fmtPrice(r.oldPrice)}</td>
+                <td className="hidden px-3 py-2.5 text-right text-slate-400 tabular-nums md:table-cell">{fmtPrice(r.oldPrice)}</td>
                 <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
                   {fmtPrice(r.newPrice)} <span className="text-xs font-normal text-slate-400">{r.unitName ? `/${r.unitName}` : ""}</span>
                 </td>
                 <td className="px-3 py-2.5"><TrendBadge price={r.newPrice} prev={r.oldPrice} /></td>
-                <td className="px-4 py-2.5 text-xs text-slate-500">{r.changedBy ?? "ระบบ"}</td>
+                <td className="hidden px-4 py-2.5 text-xs text-slate-500 lg:table-cell">{r.changedBy ?? "ระบบ"}</td>
               </tr>
             ))}
           </tbody>

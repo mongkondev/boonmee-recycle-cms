@@ -11,7 +11,7 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
     select p.id, p.title, p.description, p.image_id, p.price, p.draft_price, p.price_note, p.unit_id, u.name as unit_name,
            p.is_active, p.sort_order, p.sub_category_id, sc.name as sub_name, coalesce(sc.is_active, true) as sub_active,
            p.main_category_id, mc.name as main_name, mc.is_active as main_active,
-           lh.old_price as prev_price, lh.changed_at as last_changed, sp.spark
+           lh.old_price as prev_price, lh.changed_at as last_changed
     from products p
     join main_categories mc on mc.id = p.main_category_id
     left join sub_categories sc on sc.id = p.sub_category_id
@@ -20,12 +20,6 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
       select h.old_price, h.changed_at from price_history h
       where h.product_id = p.id order by h.changed_at desc, h.id desc limit 1
     ) lh on true
-    left join lateral (
-      select json_agg(x.new_price::float8 order by x.changed_at, x.id) as spark from (
-        select h.new_price, h.changed_at, h.id from price_history h
-        where h.product_id = p.id order by h.changed_at desc, h.id desc limit 10
-      ) x
-    ) sp on true
     -- products without a sub category come first inside their main category
     order by mc.sort_order, mc.id, sc.sort_order nulls first, sc.id nulls first, p.sort_order, p.id
   `);
@@ -49,7 +43,6 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
     mainActive: r.main_active as boolean,
     prevPrice: r.prev_price === null ? null : Number(r.prev_price),
     lastChanged: r.last_changed ? new Date(r.last_changed as string).toISOString() : null,
-    spark: ((r.spark as number[] | null) ?? []).map(Number),
   }));
 }
 

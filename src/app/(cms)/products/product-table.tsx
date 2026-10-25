@@ -4,7 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Pencil, Search, Tras
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Sparkline, Thumb, TrendBadge } from "@/components/trend";
+import { Thumb, TrendBadge } from "@/components/trend";
 import { Card, cn, Select, Toggle } from "@/components/ui";
 import { deleteProduct, setProductActive } from "@/lib/actions";
 import { fmtDate, fmtPrice, priceLabel, trendOf } from "@/lib/trend";
@@ -113,23 +113,58 @@ export function ProductTable({ rows, tree }: { rows: ProductRow[]; tree: Categor
         </Select>
       </div>
 
-      <div className={cn("overflow-x-auto", pending && "opacity-70")}>
-        <table className="w-full min-w-[960px] text-sm">
+      {/* phones: card list */}
+      <ul className={cn("divide-y divide-slate-100 md:hidden", pending && "opacity-70")}>
+        {pageRows.length === 0 && <li className="py-16 text-center text-slate-400">ไม่พบสินค้า</li>}
+        {pageRows.map((r) => {
+          const active = optimistic[r.id] ?? r.isActive;
+          return (
+            <li key={r.id} className="flex gap-3 p-4">
+              <Thumb imageId={r.imageId} alt={r.title} size={48} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <Link href={`/products/${r.id}`} className="font-medium text-slate-800">{r.title}</Link>
+                  <div className="shrink-0 text-right">
+                    <div className="font-semibold text-ink-900 tabular-nums">{priceLabel(r)}</div>
+                    <div className="text-xs text-slate-400">{r.unitName ? `บาท/${r.unitName}` : "บาท"}</div>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">{r.mainName}{r.subName && ` › ${r.subName}`}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <TrendBadge price={r.price} prev={r.prevPrice} showPct={false} />
+                  {r.draftPrice !== null && <span className="text-xs text-amber-600 tabular-nums">ร่าง {fmtPrice(r.draftPrice)}</span>}
+                  <div className="ml-auto flex items-center gap-1">
+                    <Toggle checked={active} onChange={(v) => onToggle(r, v)} label="สถานะรับซื้อ" />
+                    <Link href={`/products/${r.id}`} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="แก้ไข">
+                      <Pencil className="size-4" />
+                    </Link>
+                    <button onClick={() => onDelete(r)} className="rounded-lg p-2 text-slate-500 hover:bg-accent-50 hover:text-accent-500" title="ลบ">
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className={cn("hidden overflow-x-auto md:block", pending && "opacity-70")}>
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
             <tr>
               <Th k="title" className="pl-4">สินค้า</Th>
-              <th className="px-3 py-3">หมวดหมู่</th>
+              <th className="hidden px-3 py-3 lg:table-cell">หมวดหมู่</th>
               <Th k="price" className="text-right">ราคา</Th>
               <Th k="change">เปลี่ยนแปลง</Th>
-              <th className="px-3 py-3">แนวโน้ม</th>
-              <Th k="updated">อัปเดต</Th>
+              <Th k="updated" className="hidden xl:table-cell">อัปเดต</Th>
               <th className="px-3 py-3">สถานะ</th>
               <th className="px-3 py-3 text-right pr-4">จัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {pageRows.length === 0 && (
-              <tr><td colSpan={8} className="py-16 text-center text-slate-400">ไม่พบสินค้า</td></tr>
+              <tr><td colSpan={7} className="py-16 text-center text-slate-400">ไม่พบสินค้า</td></tr>
             )}
             {pageRows.map((r) => {
               const active = optimistic[r.id] ?? r.isActive;
@@ -140,11 +175,12 @@ export function ProductTable({ rows, tree }: { rows: ProductRow[]; tree: Categor
                       <Thumb imageId={r.imageId} alt={r.title} size={40} />
                       <div className="min-w-0">
                         <Link href={`/products/${r.id}`} className="font-medium text-slate-800 hover:text-brand-600">{r.title}</Link>
+                        <div className="text-xs text-slate-500 lg:hidden">{r.mainName}{r.subName && ` › ${r.subName}`}</div>
                         {r.description && <div className="max-w-72 truncate text-xs text-slate-400">{r.description}</div>}
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="hidden px-3 py-2.5 lg:table-cell">
                     <div className="text-slate-700">{r.mainName}</div>
                     {r.subName && <div className="text-xs text-slate-400">› {r.subName}</div>}
                   </td>
@@ -154,12 +190,11 @@ export function ProductTable({ rows, tree }: { rows: ProductRow[]; tree: Categor
                     <div className="text-xs text-slate-400">{r.unitName ? `บาท/${r.unitName}` : "บาท"}</div>
                   </td>
                   <td className="px-3 py-2.5"><TrendBadge price={r.price} prev={r.prevPrice} /></td>
-                  <td className="px-3 py-2.5"><Sparkline values={r.spark} /></td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{fmtDate(r.lastChanged)}</td>
+                  <td className="hidden px-3 py-2.5 text-xs text-slate-500 xl:table-cell">{fmtDate(r.lastChanged)}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <Toggle checked={active} onChange={(v) => onToggle(r, v)} label="สถานะรับซื้อ" />
-                      <span className={cn("text-xs", active ? "text-brand-600" : "text-slate-400")}>{active ? "Active" : "Inactive"}</span>
+                      <span className={cn("hidden text-xs lg:inline", active ? "text-brand-600" : "text-slate-400")}>{active ? "Active" : "Inactive"}</span>
                     </div>
                   </td>
                   <td className="py-2.5 pr-4 pl-3 text-right whitespace-nowrap">

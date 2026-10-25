@@ -21,30 +21,11 @@ export function TrendBadge({ price, prev, showPct = true }: { price: number; pre
       )}
       title={`จาก ${fmtPrice(prev!)} เป็น ${fmtPrice(price)}`}
     >
-      <span className="text-[10px]">{up ? "▲" : "▼"}</span>
+      <span className="text-[0.7em]">{up ? "▲" : "▼"}</span>
       {up ? "+" : "−"}
       {fmtPrice(Math.abs(t.diff))}
       {showPct && <span className="font-normal opacity-70">({Math.abs(t.pct).toFixed(1)}%)</span>}
     </span>
-  );
-}
-
-export function Sparkline({ values, className }: { values: number[]; className?: string }) {
-  if (values.length < 2) return <span className="text-xs text-slate-300">—</span>;
-  const w = 72;
-  const h = 22;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 2 - ((v - min) / span) * (h - 4)]);
-  const last = values.at(-1)!;
-  const prev = values.at(-2)!;
-  const color = last > prev ? "var(--color-up)" : last < prev ? "var(--color-down)" : "#94a3b8";
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className={className} aria-hidden>
-      <polyline points={pts.map((p) => p.join(",")).join(" ")} fill="none" stroke={color} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={pts.at(-1)![0]} cy={pts.at(-1)![1]} r="2.2" fill={color} />
-    </svg>
   );
 }
 

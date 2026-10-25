@@ -6,9 +6,9 @@ import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, cn, Label, Toggle } from "@/components/ui";
 import type { ProductRow, ShopSettings } from "@/lib/types";
+import { usePreviewWidth } from "@/lib/use-preview-width";
 import { Poster, POSTER_H, POSTER_W, type PosterData, type PosterOptions } from "./poster";
 
-const PREVIEW_W = 405; // 1080 * 0.375
 
 function group(products: ProductRow[]) {
   const mains = new Map<number, PosterData & { id: number }>();
@@ -26,6 +26,7 @@ const slug = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g,
 
 export function Exporter({ products, settings }: { products: ProductRow[]; settings: ShopSettings }) {
   const posters = useMemo(() => group(products), [products]);
+  const PREVIEW_W = usePreviewWidth(405);
   const [selected, setSelected] = useState<number[]>(posters.map((p) => p.id));
   const [options, setOptions] = useState<PosterOptions>({ columns: "auto", showUnit: true, showTrend: false, showDate: true, showSubName: true, showImage: false });
   const [qr, setQr] = useState<string | null>(null);

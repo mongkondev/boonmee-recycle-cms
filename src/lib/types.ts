@@ -22,8 +22,6 @@ export type ProductRow = {
   /** price before the latest change, null when the price has never changed */
   prevPrice: number | null;
   lastChanged: string | null;
-  /** recent prices, oldest → newest */
-  spark: number[];
 };
 
 export type CategoryTree = {

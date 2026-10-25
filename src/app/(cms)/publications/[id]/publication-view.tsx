@@ -13,13 +13,14 @@ import { A4, paginate } from "@/lib/menu";
 import type { getPublication } from "@/lib/queries";
 import { dataUrlToFile, downloadUrl, imagesToA4Pdf, renderNode } from "@/lib/render-image";
 import { fmtDate, fmtPrice } from "@/lib/trend";
+import { usePreviewWidth } from "@/lib/use-preview-width";
 
 type Pub = NonNullable<Awaited<ReturnType<typeof getPublication>>>;
-const PREVIEW_W = 360;
 
 export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
   const router = useRouter();
   const pages = useMemo(() => paginate(pub.snapshot), [pub.snapshot]);
+  const PREVIEW_W = usePreviewWidth(360);
   const [qr, setQr] = useState<string | null>(null);
   const [qrReady, setQrReady] = useState(!pub.snapshot.settings.line_url);
   const [busy, setBusy] = useState<string | null>(null);

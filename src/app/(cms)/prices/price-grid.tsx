@@ -4,7 +4,7 @@ import { Check, CornerDownLeft, LoaderCircle, Megaphone, Save, Search, TriangleA
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { PriceInput, toPriceInput } from "@/components/price-input";
-import { Sparkline, Thumb, TrendBadge } from "@/components/trend";
+import { Thumb, TrendBadge } from "@/components/trend";
 import { Button, Card, cn, Toggle } from "@/components/ui";
 import { discardDrafts, publish, saveDraft } from "@/lib/actions";
 import { fmtDate, fmtPrice, fmtPriceNote, trendOf } from "@/lib/trend";
@@ -156,7 +156,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
   let lastSub: number | null = -1;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20 md:pb-0">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="สินค้าที่เปิดรับซื้อ" value={stats.total} />
         <Stat label="ร่างรอ Publish" value={draftRows.length} tone="draft" />
@@ -207,7 +207,8 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
         </div>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-500">
+      <p className="px-1 text-xs text-amber-600 md:hidden">แก้ราคาแล้วกด “ถัดไป” บนคีย์บอร์ดเพื่อบันทึกร่าง · ราคาจะเปลี่ยนจริงเมื่อกด Publish</p>
+      <div className="hidden flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-500 md:flex">
         <span className="flex items-center gap-1">
           <Kbd>
             <CornerDownLeft className="size-3" /> Enter
@@ -221,24 +222,23 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
       </div>
 
       <Card className="overflow-x-auto">
-        <table className="w-full md:min-w-[820px] text-sm">
+        <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
             <tr>
-              <th className="hidden w-12 px-4 py-3 md:table-cell">#</th>
-              <th className="px-2 py-3">สินค้า</th>
-              <th className="hidden md:table-cell w-24 px-2 py-3">หน่วย</th>
-              <th className="hidden md:table-cell w-28 px-2 py-3 text-right">ราคาประกาศ</th>
-              <th className="w-36 px-2 py-3">เปลี่ยนแปลง</th>
-              <th className="hidden md:table-cell w-24 px-2 py-3">แนวโน้ม</th>
-              <th className="w-32 px-2 py-3 text-right md:w-44">ราคาใหม่ (บาท)</th>
-              <th className="w-10 px-2 py-3" />
-              <th className="hidden md:table-cell w-36 px-4 py-3">อัปเดตล่าสุด</th>
+              <th className="hidden w-12 px-4 py-3 xl:table-cell">#</th>
+              <th className="px-3 py-3">สินค้า</th>
+              <th className="hidden w-28 px-2 py-3 lg:table-cell">หน่วย</th>
+              <th className="hidden w-28 px-2 py-3 text-right md:table-cell">ราคาประกาศ</th>
+              <th className="hidden w-44 px-2 py-3 md:table-cell">เปลี่ยนแปลง</th>
+              <th className="w-32 px-2 py-3 text-right sm:w-40 lg:w-44">ราคาใหม่ (บาท)</th>
+              <th className="w-8 px-1 py-3" />
+              <th className="hidden w-40 px-4 py-3 xl:table-cell">อัปเดตล่าสุด</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-16 text-center text-slate-400">ไม่พบรายการ</td>
+                <td colSpan={8} className="py-16 text-center text-slate-400">ไม่พบรายการ</td>
               </tr>
             )}
             {visible.map((r, i) => {
@@ -246,14 +246,14 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                 <>
                   {r.mainCategoryId !== lastMain && (
                     <tr className="bg-ink-900 text-white">
-                      <td colSpan={9} className="px-4 py-2 text-sm font-medium">
+                      <td colSpan={8} className="px-4 py-2 text-sm font-medium">
                         {r.mainName}
                       </td>
                     </tr>
                   )}
                   {(r.subCategoryId !== lastSub || r.mainCategoryId !== lastMain) && r.subName && (
                     <tr className="border-b border-brand-100 bg-brand-50">
-                      <td colSpan={9} className="px-4 py-1.5 text-xs font-semibold text-brand-700">
+                      <td colSpan={8} className="px-4 py-1.5 text-xs font-semibold text-brand-700">
                         <span className="mr-2 inline-block size-1.5 rounded-full bg-brand-500 align-middle" />
                         {r.subName}
                       </td>
@@ -269,6 +269,19 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
               const dirty = draft !== undefined && draftVal !== (r.draftPrice ?? r.price);
               const hasDraft = r.draftPrice !== null;
               const inactive = !(r.isActive && r.subActive && r.mainActive);
+              const change =
+                dirty && draftVal !== null ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-amber-600">
+                    ยังไม่บันทึก <TrendBadge price={draftVal} prev={r.price} showPct={false} />
+                  </span>
+                ) : hasDraft ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700">ร่าง</span>
+                    <TrendBadge price={r.draftPrice!} prev={r.price} />
+                  </span>
+                ) : (
+                  <TrendBadge price={r.price} prev={r.prevPrice} />
+                );
               return (
                 <Fragment key={r.id}>
                   {header}
@@ -280,35 +293,25 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                       inactive && "opacity-50",
                     )}
                   >
-                    <td className="hidden px-4 py-2 text-xs text-slate-400 tabular-nums md:table-cell">{i + 1}</td>
-                    <td className="px-2 py-2">
+                    <td className="hidden px-4 py-2 text-xs text-slate-400 tabular-nums xl:table-cell">{i + 1}</td>
+                    <td className="px-3 py-2.5">
                       <div className="flex items-center gap-3">
-                        <span className="hidden sm:block"><Thumb imageId={r.imageId} alt={r.title} size={32} /></span>
+                        <span className="hidden sm:block"><Thumb imageId={r.imageId} alt={r.title} size={36} /></span>
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-800 md:truncate">{r.title}</div>
+                          <div className="font-medium text-slate-800">{r.title}</div>
+                          {/* compact meta for phones/tablets where the side columns are hidden */}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 lg:hidden">
+                            {r.unitName && <span>บาท/{r.unitName}</span>}
+                            <span className="md:hidden">ประกาศ {fmtPrice(r.price)}</span>
+                            <span className="md:hidden">{change}</span>
+                          </div>
                           {r.priceNote && <div className="text-xs text-slate-400">แสดงบนเมนูราคา: {fmtPriceNote(r.priceNote)}</div>}
                         </div>
                       </div>
                     </td>
-                    <td className="hidden px-2 py-2 text-slate-500 md:table-cell">{r.unitName ? `บาท/${r.unitName}` : "—"}</td>
+                    <td className="hidden px-2 py-2 text-slate-500 lg:table-cell">{r.unitName ? `บาท/${r.unitName}` : "—"}</td>
                     <td className="hidden px-2 py-2 text-right text-slate-500 tabular-nums md:table-cell">{fmtPrice(r.price)}</td>
-                    <td className="px-2 py-2">
-                      {dirty && draftVal !== null ? (
-                        <span className="text-xs text-amber-600">
-                          ยังไม่บันทึก <TrendBadge price={draftVal} prev={r.price} showPct={false} />
-                        </span>
-                      ) : hasDraft ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">ร่าง</span>
-                          <TrendBadge price={r.draftPrice!} prev={r.price} />
-                        </span>
-                      ) : (
-                        <TrendBadge price={r.price} prev={r.prevPrice} />
-                      )}
-                    </td>
-                    <td className="hidden px-2 py-2 md:table-cell">
-                      <Sparkline values={r.spark} />
-                    </td>
+                    <td className="hidden px-2 py-2 md:table-cell">{change}</td>
                     <td className="px-2 py-1.5">
                       <PriceInput
                         ref={(el) => {
@@ -319,16 +322,17 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                         onValueChange={(v) => setDrafts((d) => ({ ...d, [r.id]: v }))}
                         onKeyDown={(e) => onKeyDown(e, r)}
                         onFocus={(e) => e.currentTarget.select()}
+                        enterKeyHint="next"
                         aria-label={`ราคา ${r.title}`}
                         className={cn(
-                          "h-10 w-full rounded-lg border bg-white px-3 text-right text-base font-semibold tabular-nums outline-none transition",
+                          "h-11 w-full rounded-lg border bg-white px-3 text-right text-lg font-semibold tabular-nums outline-none transition",
                           "focus:border-brand-500 focus:ring-3 focus:ring-brand-500/20",
                           dirty ? "border-amber-400 bg-amber-50" : hasDraft ? "border-amber-300 bg-amber-50/60 text-amber-800" : "border-slate-200",
                           st?.state === "error" && "border-accent-500 bg-accent-50",
                         )}
                       />
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-1 py-2">
                       {st?.state === "saving" && <LoaderCircle className="size-4 animate-spin text-slate-400" />}
                       {st?.state === "saved" && !dirty && <Check className="size-4 text-brand-500" />}
                       {st?.state === "error" && (
@@ -338,7 +342,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                       )}
                       {dirty && st?.state !== "saving" && st?.state !== "error" && <span className="block size-2 rounded-full bg-amber-400" title="ยังไม่บันทึก" />}
                     </td>
-                    <td className="hidden px-4 py-2 text-xs text-slate-400 md:table-cell">{fmtDate(r.lastChanged)}</td>
+                    <td className="hidden px-4 py-2 text-xs text-slate-400 xl:table-cell">{fmtDate(r.lastChanged)}</td>
                   </tr>
                 </Fragment>
               );
@@ -346,6 +350,18 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
           </tbody>
         </table>
       </Card>
+
+      {/* phones: keep save / publish reachable while scrolling a long list */}
+      {(dirtyIds.length > 0 || draftRows.length > 0) && (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur md:hidden">
+          <Button onClick={saveAll} disabled={!dirtyIds.length} variant="secondary" className="flex-1">
+            <Save className="size-4" /> บันทึกร่าง{dirtyIds.length ? ` (${dirtyIds.length})` : ""}
+          </Button>
+          <Button onClick={openPublish} className="flex-1">
+            <Megaphone className="size-4" /> Publish ({draftRows.length + dirtyIds.length})
+          </Button>
+        </div>
+      )}
 
       {publishOpen && (
         <PublishDialog
@@ -442,7 +458,7 @@ function Stat({ label, value, tone, prefix }: { label: string; value: number; to
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[11px] text-slate-600 shadow-[0_1px_0_#e2e8f0]">
+    <kbd className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-xs text-slate-600 shadow-[0_1px_0_#e2e8f0]">
       {children}
     </kbd>
   );

@@ -77,12 +77,12 @@ export function UserManager({ users, invites, meId, mailEnabled }: Data & { meId
       <div className="space-y-6">
         <Card className="overflow-x-auto">
           <div className="border-b border-slate-100 px-4 py-3 font-semibold text-ink-900">ผู้ใช้ ({users.length})</div>
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">ผู้ใช้</th>
-                <th className="px-3 py-2.5">สิทธิ์</th>
-                <th className="px-3 py-2.5">2FA</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">สิทธิ์</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">2FA</th>
                 <th className="px-3 py-2.5">สถานะ</th>
                 <th className="px-4 py-2.5 text-right">จัดการ</th>
               </tr>
@@ -96,14 +96,18 @@ export function UserManager({ users, invites, meId, mailEnabled }: Data & { meId
                       <div className="font-medium text-slate-800">
                         {u.displayName || u.email} {self && <span className="text-xs font-normal text-slate-400">(คุณ)</span>}
                       </div>
-                      <div className="text-xs text-slate-400">{u.email}</div>
+                      <div className="text-xs break-all text-slate-400">{u.email}</div>
+                      <div className="mt-1 flex gap-2 text-xs sm:hidden">
+                        <span className="text-slate-500">{u.role === "super" ? "Super admin" : "Admin"}</span>
+                        <span className={u.totpEnabled ? "text-brand-600" : "text-amber-600"}>{u.totpEnabled ? "2FA เปิดแล้ว" : "2FA รอตั้งค่า"}</span>
+                      </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="hidden px-3 py-3 sm:table-cell">
                       <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", u.role === "super" ? "bg-ink-900 text-white" : "bg-slate-100 text-slate-600")}>
                         {u.role === "super" ? "Super admin" : "Admin"}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="hidden px-3 py-3 sm:table-cell">
                       {u.totpEnabled ? (
                         <span className="inline-flex items-center gap-1 text-xs text-brand-600"><ShieldCheck className="size-4" /> เปิดแล้ว</span>
                       ) : (

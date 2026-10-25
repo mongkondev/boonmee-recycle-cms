@@ -76,12 +76,12 @@ export const MenuA4Page = forwardRef<HTMLDivElement, Props>(function MenuA4Page(
         {page.blocks.map((b, i) => (
           <section key={i} style={{ marginBottom: A4.blockGap }}>
             <div style={{ height: A4.pill, marginBottom: A4.pillGap }} className="flex items-center justify-center gap-4 rounded-full bg-gradient-to-r from-[#3a9e1d] via-[#4fae2f] to-[#64b947] text-white shadow-[0_10px_24px_-12px_rgba(58,158,29,0.7)]">
-              <RecycleMark size={34} className="text-white/85" />
-              <h2 className="text-[36px] font-bold">
+              <RecycleMark size={26} className="text-white/85" />
+              <h2 className="text-[30px] font-bold">
                 {b.mainName}
-                {b.continued && <span className="ml-2 text-[22px] font-medium text-white/80">(ต่อ)</span>}
+                {b.continued && <span className="ml-2 text-[20px] font-medium text-white/80">(ต่อ)</span>}
               </h2>
-              <RecycleMark size={34} className="text-white/85" />
+              <RecycleMark size={26} className="text-white/85" />
             </div>
             <div className="grid grid-cols-2 gap-8 rounded-[28px] bg-white/90 px-6 py-1 shadow-[0_8px_24px_-14px_rgba(0,48,32,0.25)] ring-1 ring-[#3a9e1d]/10">
               {b.columns.map((col, ci) => (

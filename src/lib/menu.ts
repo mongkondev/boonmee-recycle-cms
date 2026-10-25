@@ -47,8 +47,8 @@ export const A4 = {
   header: 268,
   footer: 104,
   bodyPadY: 36,
-  pill: 70,
-  pillGap: 14,
+  pill: 56,
+  pillGap: 10,
   blockGap: 30,
   row: 38,
 };

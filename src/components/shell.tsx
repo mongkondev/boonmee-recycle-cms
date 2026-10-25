@@ -78,7 +78,7 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
           {NAV.map((g) => (
             <div key={g.group}>
-              <div className="mb-2 px-3 text-[11px] font-medium tracking-wider text-brand-200/50 uppercase">{g.group}</div>
+              <div className="mb-2 px-3 text-xs font-medium tracking-wider text-brand-200/50 uppercase">{g.group}</div>
               <ul className="space-y-1">
                 {g.items.filter((i) => !i.superOnly || user.role === "super").map(({ href, label, icon: Icon }) => {
                   const active = pathname.startsWith(href);
@@ -124,7 +124,7 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
           </span>
           <div className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pr-1 pl-3">
             <span className="text-sm font-medium text-slate-700">{user.name}</span>
-            {user.role === "super" && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold text-white">SUPER</span>}
+            {user.role === "super" && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[11px] font-semibold text-white">SUPER</span>}
             <span className="grid size-7 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
               {user.name.slice(0, 1).toUpperCase()}
             </span>

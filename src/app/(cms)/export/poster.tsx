@@ -91,21 +91,21 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
         </header>
 
         {/* main category = the big green menu pill */}
-        <div className="relative mx-14 mt-10 flex flex-col items-center">
-          <div className="relative flex items-center gap-5 rounded-full bg-gradient-to-r from-[#3a9e1d] via-[#4fae2f] to-[#64b947] px-20 py-4 text-white shadow-[0_14px_30px_-12px_rgba(58,158,29,0.7)]">
-            <RecycleMark size={54} className="text-white/85" />
-            <h2 className="text-[64px] leading-tight font-bold">{data.mainName}</h2>
-            <RecycleMark size={54} className="text-white/85" />
+        <div className="relative mx-14 mt-8 flex flex-col items-center">
+          <div className="relative flex items-center gap-4 rounded-full bg-gradient-to-r from-[#3a9e1d] via-[#4fae2f] to-[#64b947] px-14 py-2 text-white shadow-[0_10px_24px_-12px_rgba(58,158,29,0.7)]">
+            <RecycleMark size={36} className="text-white/85" />
+            <h2 className="text-[44px] leading-tight font-bold">{data.mainName}</h2>
+            <RecycleMark size={36} className="text-white/85" />
           </div>
           {options.showDate && (
-            <div className="mt-4 rounded-full bg-white px-6 py-1.5 text-[22px] text-slate-500 shadow-sm ring-1 ring-[#3a9e1d]/15">
+            <div className="mt-3 rounded-full bg-white px-5 py-1 text-[20px] text-slate-500 shadow-sm ring-1 ring-[#3a9e1d]/15">
               ราคา ณ วันที่ <span className="font-semibold text-[#003020]">{today}</span>
             </div>
           )}
         </div>
 
         {/* menu items, grouped by sub category */}
-        <div ref={bodyRef} className="relative mx-10 mt-8 flex min-h-0 flex-1 flex-col justify-center-safe overflow-hidden">
+        <div ref={bodyRef} className="relative mx-10 mt-6 min-h-0 flex-1 overflow-hidden">
           <div
             style={{ fontSize: 34 * scale, columnCount: twoCol ? 2 : 1, columnGap: 28 }}
             className="h-fit"

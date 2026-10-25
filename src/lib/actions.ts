@@ -58,6 +58,9 @@ export async function discardDrafts(): Promise<ActionResult> {
  */
 export async function publish(note: string): Promise<ActionResult<{ id: number }>> {
   const user = await requireUser();
+  // read outside the transaction: on Vercel the pool has a single connection, so any `db` query
+  // issued inside `db.transaction` would wait forever for the connection the transaction holds
+  const settings = await getSettings();
   const id = await db.transaction(async (tx) => {
     const [pub] = await tx
       .insert(schema.publications)
@@ -83,7 +86,7 @@ export async function publish(note: string): Promise<ActionResult<{ id: number }
         changedAt: now,
       });
     }
-    const snapshot = buildMenu(await getProducts(tx), await getSettings());
+    const snapshot = buildMenu(await getProducts(tx), settings);
     await tx
       .update(schema.publications)
       .set({ snapshot, changeCount: drafts.length })
