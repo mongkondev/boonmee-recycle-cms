@@ -1,11 +1,14 @@
 import "server-only";
-import { asc, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import type { MenuSnapshot } from "./menu";
 import type { CategoryTree, ProductRow, ShopSettings, Unit } from "./types";
 
-export async function getProducts(): Promise<ProductRow[]> {
-  const rows = await db.execute<Record<string, unknown>>(sql`
-    select p.id, p.title, p.description, p.image_id, p.price, p.price_note, p.unit_id, u.name as unit_name,
+type Executor = Pick<typeof db, "execute">;
+
+export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
+  const rows = await exec.execute<Record<string, unknown>>(sql`
+    select p.id, p.title, p.description, p.image_id, p.price, p.draft_price, p.price_note, p.unit_id, u.name as unit_name,
            p.is_active, p.sort_order, p.sub_category_id, sc.name as sub_name, sc.is_active as sub_active,
            sc.main_category_id, mc.name as main_name, mc.is_active as main_active,
            lh.old_price as prev_price, lh.changed_at as last_changed, sp.spark
@@ -31,6 +34,7 @@ export async function getProducts(): Promise<ProductRow[]> {
     description: r.description as string | null,
     imageId: r.image_id as string | null,
     price: Number(r.price),
+    draftPrice: r.draft_price === null ? null : Number(r.draft_price),
     priceNote: r.price_note as string | null,
     unitId: r.unit_id as number | null,
     unitName: r.unit_name as string | null,
@@ -117,4 +121,53 @@ export async function getHistory(limit = 300) {
     subName: r.sub_name as string,
     unitName: r.unit_name as string | null,
   }));
+}
+
+export async function getPublications() {
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.username) as published_by,
+           (select count(*)::int from publication_pages pp where pp.publication_id = pb.id) as page_count,
+           (select pp.image_id from publication_pages pp where pp.publication_id = pb.id order by pp.page_no limit 1) as cover_id
+    from publications pb left join users u on u.id = pb.published_by
+    order by pb.published_at desc, pb.id desc limit 100
+  `);
+  return rows.map((r) => ({
+    id: r.id as number,
+    note: r.note as string | null,
+    changeCount: r.change_count as number,
+    publishedAt: new Date(r.published_at as string).toISOString(),
+    publishedBy: r.published_by as string | null,
+    pageCount: r.page_count as number,
+    coverId: r.cover_id as string | null,
+  }));
+}
+
+export async function getPublication(id: number) {
+  const pub = await db.query.publications.findFirst({ where: eq(schema.publications.id, id) });
+  if (!pub) return null;
+  const pages = await db
+    .select({ pageNo: schema.publicationPages.pageNo, imageId: schema.publicationPages.imageId })
+    .from(schema.publicationPages)
+    .where(eq(schema.publicationPages.publicationId, id))
+    .orderBy(asc(schema.publicationPages.pageNo));
+  const changes = await db.execute<Record<string, unknown>>(sql`
+    select h.id, p.title, h.old_price, h.new_price, u.name as unit_name
+    from price_history h join products p on p.id = h.product_id left join units u on u.id = p.unit_id
+    where h.publication_id = ${id} order by h.id
+  `);
+  return {
+    id: pub.id,
+    note: pub.note,
+    changeCount: pub.changeCount,
+    publishedAt: pub.publishedAt.toISOString(),
+    snapshot: pub.snapshot as MenuSnapshot,
+    pages,
+    changes: changes.map((c) => ({
+      id: c.id as number,
+      title: c.title as string,
+      oldPrice: c.old_price === null ? null : Number(c.old_price),
+      newPrice: Number(c.new_price),
+      unitName: c.unit_name as string | null,
+    })),
+  };
 }

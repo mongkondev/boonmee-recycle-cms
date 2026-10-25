@@ -4,6 +4,8 @@ export type ProductRow = {
   description: string | null;
   imageId: string | null;
   price: number;
+  /** pending price waiting for publish */
+  draftPrice: number | null;
   priceNote: string | null;
   unitId: number | null;
   unitName: string | null;

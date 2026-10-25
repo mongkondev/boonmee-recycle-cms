@@ -1,6 +1,7 @@
 import {
   boolean,
   customType,
+  jsonb,
   index,
   integer,
   pgTable,
@@ -81,6 +82,8 @@ export const products = pgTable(
     description: text("description"),
     imageId: uuid("image_id").references(() => images.id, { onDelete: "set null" }),
     price: money("price").notNull(),
+    // pending price waiting for the next publish; null = no draft
+    draftPrice: money("draft_price"),
     // optional display override for ranges such as "3000-30000" or "100+"
     priceNote: text("price_note"),
     unitId: integer("unit_id").references(() => units.id, { onDelete: "set null" }),
@@ -102,6 +105,7 @@ export const priceHistory = pgTable(
     oldPrice: money("old_price"),
     newPrice: money("new_price").notNull(),
     changedBy: integer("changed_by").references(() => users.id, { onDelete: "set null" }),
+    publicationId: integer("publication_id").references(() => publications.id, { onDelete: "set null" }),
     changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("price_history_product_idx").on(t.productId, t.changedAt)],
@@ -111,3 +115,30 @@ export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+/** One "ประกาศราคา" — a publish of all draft prices, with a frozen copy of the menu at that moment. */
+export const publications = pgTable("publications", {
+  id: serial("id").primaryKey(),
+  note: text("note"),
+  changeCount: integer("change_count").notNull().default(0),
+  // { settings, mains: [{ name, sections: [{ name, items: [...] }] }] } — rendered later into A4 pages
+  snapshot: jsonb("snapshot").notNull(),
+  publishedBy: integer("published_by").references(() => users.id, { onDelete: "set null" }),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Rendered A4 menu pages for a publication (stored so they can be re-sent without re-rendering). */
+export const publicationPages = pgTable(
+  "publication_pages",
+  {
+    id: serial("id").primaryKey(),
+    publicationId: integer("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
+    pageNo: integer("page_no").notNull(),
+    imageId: uuid("image_id")
+      .notNull()
+      .references(() => images.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("publication_pages_pub_idx").on(t.publicationId, t.pageNo)],
+);

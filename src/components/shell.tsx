@@ -5,6 +5,7 @@ import {
   FolderTree,
   History,
   LogOut,
+  Megaphone,
   Menu,
   Package,
   Ruler,
@@ -23,6 +24,7 @@ const NAV = [
     group: "ราคา",
     items: [
       { href: "/prices", label: "ปรับปรุงราคา", icon: TrendingUp },
+      { href: "/publications", label: "ประกาศราคา (A4)", icon: Megaphone },
       { href: "/history", label: "ประวัติราคา", icon: History },
       { href: "/export", label: "เมนูราคา", icon: FileImage },
     ],
@@ -95,7 +97,7 @@ export function Shell({ user, children }: { user: { name: string }; children: Re
           ))}
         </nav>
         <div className="m-3 rounded-xl bg-white/5 p-3 text-xs text-brand-100/70">
-          เคล็ดลับ: หน้า <b className="text-white">ปรับปรุงราคา</b> กด <kbd className="rounded bg-white/10 px-1">Enter</kbd> เพื่อบันทึกและไปแถวถัดไป
+          เคล็ดลับ: หน้า <b className="text-white">ปรับปรุงราคา</b> กด <kbd className="rounded bg-white/10 px-1">Enter</kbd> บันทึกร่าง แล้วกด <b className="text-white">Publish</b> เพื่อประกาศราคาและสร้างเมนู A4
         </div>
       </aside>
       {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}

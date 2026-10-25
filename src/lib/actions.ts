@@ -1,11 +1,13 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireUser } from "./auth";
+import { buildMenu } from "./menu";
+import { getProducts, getSettings } from "./queries";
 import type { ShopSettings } from "./types";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -13,7 +15,7 @@ export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; 
 const fail = (error: string) => ({ ok: false as const, error });
 
 function revalidateAll() {
-  for (const p of ["/prices", "/products", "/categories", "/units", "/export", "/history"]) revalidatePath(p);
+  for (const p of ["/prices", "/products", "/categories", "/units", "/export", "/history", "/publications"]) revalidatePath(p);
 }
 
 function isFkViolation(e: unknown) {
@@ -21,40 +23,109 @@ function isFkViolation(e: unknown) {
   return err?.code === "23503" || err?.cause?.code === "23503";
 }
 
-/* ---------------- prices ---------------- */
+/* ---------------- prices: draft → publish ---------------- */
 
 const priceSchema = z.number().finite().min(0, "ราคาต้องไม่ติดลบ").max(9_999_999_999);
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export async function updatePrice(
-  productId: number,
-  newPrice: number,
-): Promise<ActionResult<{ price: number; prevPrice: number | null; changedAt: string | null }>> {
-  const user = await requireUser();
+/** Stage a new price. A draft equal to the live price clears the draft. */
+export async function saveDraft(productId: number, newPrice: number): Promise<ActionResult<{ draftPrice: number | null }>> {
+  await requireUser();
   const parsed = priceSchema.safeParse(newPrice);
   if (!parsed.success) return fail(parsed.error.issues[0].message);
-  const price = Math.round(parsed.data * 100) / 100;
+  const price = round2(parsed.data);
+  const [row] = await db
+    .update(schema.products)
+    .set({ draftPrice: sql`case when ${schema.products.price} = ${price} then null else ${price}::numeric end` })
+    .where(eq(schema.products.id, productId))
+    .returning({ draftPrice: schema.products.draftPrice });
+  if (!row) return fail("ไม่พบสินค้า");
+  // no revalidatePath: every CMS page is dynamic, and skipping it keeps Enter-to-save snappy
+  return { ok: true, data: { draftPrice: row.draftPrice } };
+}
 
-  return db.transaction(async (tx) => {
-    const [current] = await tx
-      .select({ price: schema.products.price })
+export async function discardDrafts(): Promise<ActionResult> {
+  await requireUser();
+  await db.update(schema.products).set({ draftPrice: null }).where(isNotNull(schema.products.draftPrice));
+  revalidateAll();
+  return { ok: true };
+}
+
+/**
+ * Apply every draft price, log history, and freeze the resulting menu as a publication.
+ * The client then renders the A4 pages from the snapshot and uploads them (savePublicationPage).
+ */
+export async function publish(note: string): Promise<ActionResult<{ id: number }>> {
+  const user = await requireUser();
+  const id = await db.transaction(async (tx) => {
+    const [pub] = await tx
+      .insert(schema.publications)
+      .values({ note: note.trim().slice(0, 300) || null, snapshot: {}, publishedBy: user.id })
+      .returning({ id: schema.publications.id });
+    const drafts = await tx
+      .select({ id: schema.products.id, price: schema.products.price, draft: schema.products.draftPrice })
       .from(schema.products)
-      .where(eq(schema.products.id, productId))
+      .where(isNotNull(schema.products.draftPrice))
       .for("update");
-    if (!current) return fail("ไม่พบสินค้า");
-    if (current.price === price) return { ok: true as const, data: { price, prevPrice: null, changedAt: null } };
-
     const now = new Date();
-    await tx.update(schema.products).set({ price, updatedAt: now }).where(eq(schema.products.id, productId));
-    await tx.insert(schema.priceHistory).values({
-      productId,
-      oldPrice: current.price,
-      newPrice: price,
-      changedBy: user.id,
-      changedAt: now,
-    });
-    // no revalidatePath here: every CMS page is dynamic, and skipping it keeps Enter-to-save snappy
-    return { ok: true as const, data: { price, prevPrice: current.price, changedAt: now.toISOString() } };
+    for (const d of drafts) {
+      await tx
+        .update(schema.products)
+        .set({ price: d.draft!, draftPrice: null, updatedAt: now })
+        .where(eq(schema.products.id, d.id));
+      await tx.insert(schema.priceHistory).values({
+        productId: d.id,
+        oldPrice: d.price,
+        newPrice: d.draft!,
+        changedBy: user.id,
+        publicationId: pub.id,
+        changedAt: now,
+      });
+    }
+    const snapshot = buildMenu(await getProducts(tx), await getSettings());
+    await tx
+      .update(schema.publications)
+      .set({ snapshot, changeCount: drafts.length })
+      .where(eq(schema.publications.id, pub.id));
+    return pub.id;
   });
+  revalidateAll();
+  revalidatePath("/publications");
+  return { ok: true, data: { id } };
+}
+
+/** Store one rendered A4 page image (replaces an existing page with the same number). */
+export async function savePublicationPage(publicationId: number, pageNo: number, form: FormData): Promise<ActionResult> {
+  await requireUser();
+  const file = form.get("file");
+  if (!(file instanceof File) || file.type !== "image/jpeg") return fail("ไฟล์ไม่ถูกต้อง");
+  if (file.size > 8 * 1024 * 1024) return fail("ไฟล์ใหญ่เกินไป");
+  await db.transaction(async (tx) => {
+    const old = await tx
+      .select({ imageId: schema.publicationPages.imageId })
+      .from(schema.publicationPages)
+      .where(and(eq(schema.publicationPages.publicationId, publicationId), eq(schema.publicationPages.pageNo, pageNo)));
+    // deleting the image cascades to its publication_pages row
+    for (const o of old) await tx.delete(schema.images).where(eq(schema.images.id, o.imageId));
+    const [img] = await tx
+      .insert(schema.images)
+      .values({ mime: file.type, data: Buffer.from(await file.arrayBuffer()) })
+      .returning({ id: schema.images.id });
+    await tx.insert(schema.publicationPages).values({ publicationId, pageNo, imageId: img.id });
+  });
+  revalidatePath("/publications");
+  return { ok: true };
+}
+
+/** Drop stored pages beyond `pageCount` (when a re-render produced fewer pages). */
+export async function trimPublicationPages(publicationId: number, pageCount: number): Promise<ActionResult> {
+  await requireUser();
+  const extra = await db
+    .select({ imageId: schema.publicationPages.imageId })
+    .from(schema.publicationPages)
+    .where(and(eq(schema.publicationPages.publicationId, publicationId), gt(schema.publicationPages.pageNo, pageCount)));
+  for (const e of extra) await db.delete(schema.images).where(eq(schema.images.id, e.imageId));
+  return { ok: true };
 }
 
 /* ---------------- categories ---------------- */
@@ -199,10 +270,12 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult<{ i
     if (id) {
       const [current] = await tx.select().from(schema.products).where(eq(schema.products.id, id)).for("update");
       if (!current) throw new Error("not found");
-      await tx.update(schema.products).set({ ...data, updatedAt: new Date() }).where(eq(schema.products.id, id));
-      if (current.price !== data.price) {
-        await tx.insert(schema.priceHistory).values({ productId: id, oldPrice: current.price, newPrice: data.price, changedBy: user.id });
-      }
+      // price changes on existing products go through the draft → publish flow
+      const { price, ...rest } = data;
+      await tx
+        .update(schema.products)
+        .set({ ...rest, draftPrice: price === current.price ? null : price, updatedAt: new Date() })
+        .where(eq(schema.products.id, id));
       // drop the previous image once it is no longer referenced
       if (current.imageId && current.imageId !== data.imageId) {
         await tx.delete(schema.images).where(eq(schema.images.id, current.imageId));

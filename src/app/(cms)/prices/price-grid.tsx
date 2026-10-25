@@ -1,10 +1,11 @@
 "use client";
 
-import { Check, CornerDownLeft, LoaderCircle, Save, Search, TriangleAlert } from "lucide-react";
+import { Check, CornerDownLeft, LoaderCircle, Megaphone, Save, Search, TriangleAlert, Undo2, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { Sparkline, Thumb, TrendBadge } from "@/components/trend";
 import { Button, Card, cn, Toggle } from "@/components/ui";
-import { updatePrice } from "@/lib/actions";
+import { discardDrafts, publish, saveDraft } from "@/lib/actions";
 import { fmtDate, fmtPrice, trendOf } from "@/lib/trend";
 import type { ProductRow } from "@/lib/types";
 
@@ -21,7 +22,9 @@ const parsePrice = (s: string) => {
 };
 
 export function PriceGrid({ initial }: { initial: ProductRow[] }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initial);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [status, setStatus] = useState<Record<number, RowStatus>>({});
   const [query, setQuery] = useState("");
@@ -50,8 +53,10 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
     .filter((id) => {
       const row = rows.find((r) => r.id === id);
       const v = parsePrice(drafts[id]);
-      return row && v !== null && v !== row.price;
+      return row && v !== null && v !== (row.draftPrice ?? row.price);
     });
+
+  const draftRows = rows.filter((r) => r.draftPrice !== null);
 
   const focusRow = useCallback(
     (fromId: number, delta: number) => {
@@ -76,25 +81,18 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
         setStatus((s) => ({ ...s, [id]: { state: "error", message: "ราคาไม่ถูกต้อง", at: Date.now() } }));
         return false;
       }
-      if (value === row.price) {
+      if (value === (row.draftPrice ?? row.price)) {
         setDrafts((d) => omit(d, id));
         return true;
       }
       setStatus((s) => ({ ...s, [id]: { state: "saving", at: Date.now() } }));
       try {
-        const res = await updatePrice(id, value);
+        const res = await saveDraft(id, value);
         if (!res.ok) {
           setStatus((s) => ({ ...s, [id]: { state: "error", message: res.error, at: Date.now() } }));
           return false;
         }
-        const d = res.data!;
-        setRows((rs) =>
-          rs.map((r) =>
-            r.id === id && d.changedAt
-              ? { ...r, price: d.price, prevPrice: d.prevPrice, lastChanged: d.changedAt, spark: [...r.spark, d.price].slice(-10) }
-              : r,
-          ),
-        );
+        setRows((rs) => rs.map((r) => (r.id === id ? { ...r, draftPrice: res.data!.draftPrice } : r)));
         setDrafts((d) => omit(d, id));
         setStatus((s) => ({ ...s, [id]: { state: "saved", at: Date.now() } }));
         return true;
@@ -107,7 +105,22 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
   );
 
   const saveAll = async () => {
-    for (const id of dirtyIds) await save(id);
+    let ok = true;
+    for (const id of dirtyIds) ok = (await save(id)) && ok;
+    return ok;
+  };
+
+  const openPublish = async () => {
+    if (dirtyIds.length && !(await saveAll())) return;
+    setPublishOpen(true);
+  };
+
+  const onDiscard = async () => {
+    if (!confirm(`ล้างราคาร่างทั้งหมด ${draftRows.length} รายการ? ราคาจะกลับเป็นราคาที่ประกาศอยู่`)) return;
+    await discardDrafts();
+    setRows((rs) => rs.map((r) => ({ ...r, draftPrice: null })));
+    setDrafts({});
+    setStatus({});
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, row: ProductRow) => {
@@ -129,11 +142,9 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
   };
 
   const stats = useMemo(() => {
-    const today = new Date().toDateString();
     const active = rows.filter((r) => r.isActive);
     return {
       total: active.length,
-      today: rows.filter((r) => r.lastChanged && new Date(r.lastChanged).toDateString() === today && r.prevPrice !== null).length,
       up: active.filter((r) => trendOf(r.price, r.prevPrice).dir === "up").length,
       down: active.filter((r) => trendOf(r.price, r.prevPrice).dir === "down").length,
     };
@@ -147,7 +158,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="สินค้าที่เปิดรับซื้อ" value={stats.total} />
-        <Stat label="ปรับราคาวันนี้" value={stats.today} tone="brand" />
+        <Stat label="ร่างรอ Publish" value={draftRows.length} tone="draft" />
         <Stat label="ราคาขึ้น (ล่าสุด)" value={stats.up} tone="up" prefix="▲" />
         <Stat label="ราคาลง (ล่าสุด)" value={stats.down} tone="down" prefix="▼" />
       </div>
@@ -180,9 +191,19 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
           <Toggle checked={showInactive} onChange={setShowInactive} label="แสดงรายการปิดรับซื้อ" />
           แสดง inactive
         </label>
-        <Button onClick={saveAll} disabled={!dirtyIds.length} size="sm" className="h-9">
-          <Save className="size-4" /> บันทึกทั้งหมด{dirtyIds.length ? ` (${dirtyIds.length})` : ""}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {draftRows.length > 0 && (
+            <Button onClick={onDiscard} variant="ghost" size="sm" className="h-9" title="ล้างราคาร่างทั้งหมด">
+              <Undo2 className="size-4" /> ล้างร่าง
+            </Button>
+          )}
+          <Button onClick={saveAll} disabled={!dirtyIds.length} variant="secondary" size="sm" className="h-9">
+            <Save className="size-4" /> บันทึกร่าง{dirtyIds.length ? ` (${dirtyIds.length})` : ""}
+          </Button>
+          <Button onClick={openPublish} size="sm" className="h-9">
+            <Megaphone className="size-4" /> Publish{draftRows.length + dirtyIds.length ? ` (${draftRows.length + dirtyIds.length})` : ""}
+          </Button>
+        </div>
       </Card>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-500">
@@ -190,9 +211,10 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
           <Kbd>
             <CornerDownLeft className="size-3" /> Enter
           </Kbd>
-          บันทึก + แถวถัดไป
+          บันทึกร่าง + แถวถัดไป
         </span>
-        <span><Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> บันทึก + แถวก่อนหน้า</span>
+        <span><Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> บันทึกร่าง + แถวก่อนหน้า</span>
+        <span className="text-amber-600">ราคาจะเปลี่ยนจริงเมื่อกด Publish</span>
         <span><Kbd>↑</Kbd><Kbd>↓</Kbd> เลื่อนแถว</span>
         <span><Kbd>Esc</Kbd> ยกเลิกการแก้ไข</span>
       </div>
@@ -204,10 +226,10 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
               <th className="hidden w-12 px-4 py-3 md:table-cell">#</th>
               <th className="px-2 py-3">สินค้า</th>
               <th className="hidden md:table-cell w-24 px-2 py-3">หน่วย</th>
-              <th className="hidden md:table-cell w-28 px-2 py-3 text-right">ราคาก่อนหน้า</th>
+              <th className="hidden md:table-cell w-28 px-2 py-3 text-right">ราคาประกาศ</th>
               <th className="w-36 px-2 py-3">เปลี่ยนแปลง</th>
               <th className="hidden md:table-cell w-24 px-2 py-3">แนวโน้ม</th>
-              <th className="w-32 px-2 py-3 text-right md:w-44">ราคาปัจจุบัน (บาท)</th>
+              <th className="w-32 px-2 py-3 text-right md:w-44">ราคาใหม่ (บาท)</th>
               <th className="w-10 px-2 py-3" />
               <th className="hidden md:table-cell w-36 px-4 py-3">อัปเดตล่าสุด</th>
             </tr>
@@ -243,7 +265,8 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
               const draft = drafts[r.id];
               const st = status[r.id];
               const draftVal = draft !== undefined ? parsePrice(draft) : null;
-              const dirty = draft !== undefined && draftVal !== r.price;
+              const dirty = draft !== undefined && draftVal !== (r.draftPrice ?? r.price);
+              const hasDraft = r.draftPrice !== null;
               const inactive = !(r.isActive && r.subActive && r.mainActive);
               return (
                 <Fragment key={r.id}>
@@ -267,11 +290,16 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                       </div>
                     </td>
                     <td className="hidden px-2 py-2 text-slate-500 md:table-cell">{r.unitName ? `บาท/${r.unitName}` : "—"}</td>
-                    <td className="hidden px-2 py-2 text-right text-slate-400 tabular-nums md:table-cell">{r.prevPrice !== null ? fmtPrice(r.prevPrice) : "—"}</td>
+                    <td className="hidden px-2 py-2 text-right text-slate-500 tabular-nums md:table-cell">{fmtPrice(r.price)}</td>
                     <td className="px-2 py-2">
                       {dirty && draftVal !== null ? (
                         <span className="text-xs text-amber-600">
-                          รอบันทึก <TrendBadge price={draftVal} prev={r.price} showPct={false} />
+                          ยังไม่บันทึก <TrendBadge price={draftVal} prev={r.price} showPct={false} />
+                        </span>
+                      ) : hasDraft ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">ร่าง</span>
+                          <TrendBadge price={r.draftPrice!} prev={r.price} />
                         </span>
                       ) : (
                         <TrendBadge price={r.price} prev={r.prevPrice} />
@@ -287,7 +315,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                           else inputs.current.delete(r.id);
                         }}
                         inputMode="decimal"
-                        value={draft ?? String(r.price)}
+                        value={draft ?? String(r.draftPrice ?? r.price)}
                         onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value.replace(/[^\d.,]/g, "") }))}
                         onKeyDown={(e) => onKeyDown(e, r)}
                         onFocus={(e) => e.currentTarget.select()}
@@ -295,7 +323,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                         className={cn(
                           "h-10 w-full rounded-lg border bg-white px-3 text-right text-base font-semibold tabular-nums outline-none transition",
                           "focus:border-brand-500 focus:ring-3 focus:ring-brand-500/20",
-                          dirty ? "border-amber-400 bg-amber-50" : "border-slate-200",
+                          dirty ? "border-amber-400 bg-amber-50" : hasDraft ? "border-amber-300 bg-amber-50/60 text-amber-800" : "border-slate-200",
                           st?.state === "error" && "border-accent-500 bg-accent-50",
                         )}
                       />
@@ -318,18 +346,88 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
           </tbody>
         </table>
       </Card>
+
+      {publishOpen && (
+        <PublishDialog
+          rows={rows.filter((r) => r.draftPrice !== null)}
+          onClose={() => setPublishOpen(false)}
+          onDone={(id) => router.push(`/publications/${id}?fresh=1`)}
+        />
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, tone, prefix }: { label: string; value: number; tone?: "brand" | "up" | "down"; prefix?: string }) {
+function PublishDialog({ rows, onClose, onDone }: { rows: ProductRow[]; onClose: () => void; onDone: (id: number) => void }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = async () => {
+    setBusy(true);
+    const res = await publish(note);
+    if (res.ok) onDone(res.data!.id);
+    else {
+      setError(res.error);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <Card className="flex max-h-[85dvh] w-full max-w-lg flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-3 border-b border-slate-100 p-5">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-600">
+            <Megaphone className="size-5" />
+          </span>
+          <div className="flex-1">
+            <h2 className="font-semibold text-ink-900">Publish ราคาใหม่</h2>
+            <p className="text-sm text-slate-500">
+              {rows.length ? `เปลี่ยนราคา ${rows.length} รายการ` : "ไม่มีราคาเปลี่ยน — จะสร้างเมนูราคาจากราคาปัจจุบัน"} แล้วสร้างเมนู A4 เก็บไว้ส่งลูกค้า
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100" aria-label="ปิด">
+            <X className="size-5" />
+          </button>
+        </div>
+        {rows.length > 0 && (
+          <ul className="flex-1 divide-y divide-slate-100 overflow-y-auto px-5">
+            {rows.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                <span className="text-slate-400 tabular-nums line-through">{fmtPrice(r.price)}</span>
+                <span className="font-semibold tabular-nums">{fmtPrice(r.draftPrice!)}</span>
+                <TrendBadge price={r.draftPrice!} prev={r.price} showPct={false} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="space-y-3 border-t border-slate-100 p-5">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="หมายเหตุ (ไม่บังคับ) เช่น ราคาทองแดงขึ้นตามตลาด"
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
+          />
+          {error && <p className="text-sm text-accent-600">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>ยกเลิก</Button>
+            <Button onClick={submit} disabled={busy} autoFocus>
+              {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Megaphone className="size-4" />} ยืนยัน Publish
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Stat({ label, value, tone, prefix }: { label: string; value: number; tone?: "draft" | "up" | "down"; prefix?: string }) {
   return (
     <Card className="p-4">
       <div className="text-xs text-slate-500">{label}</div>
       <div
         className={cn(
           "mt-1 text-2xl font-semibold tabular-nums",
-          tone === "brand" && "text-brand-600",
+          tone === "draft" && "text-amber-600",
           tone === "up" && "text-up",
           tone === "down" && "text-down",
           !tone && "text-ink-900",

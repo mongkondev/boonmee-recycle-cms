@@ -13,6 +13,8 @@ export type ProductFormValue = {
   title: string;
   description: string;
   price: string;
+  /** current published price (edit only) — a different value is saved as a draft */
+  livePrice?: number;
   priceNote: string;
   unitId: string;
   mainCategoryId: string;
@@ -109,6 +111,9 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
           <div>
             <Label htmlFor="price" required>ราคา (บาท)</Label>
             <Input id="price" inputMode="decimal" value={v.price} onChange={(e) => set("price", e.target.value.replace(/[^\d.,]/g, ""))} className="text-right font-semibold tabular-nums" placeholder="0" />
+            {v.livePrice !== undefined && Number(v.price.replace(/,/g, "")) !== v.livePrice && (
+              <p className="mt-1 text-xs text-amber-600">ราคาประกาศปัจจุบัน {v.livePrice.toLocaleString("th-TH")} — ราคาใหม่จะเป็นร่างจนกว่าจะ Publish</p>
+            )}
           </div>
           <div>
             <Label htmlFor="unit">หน่วย</Label>
