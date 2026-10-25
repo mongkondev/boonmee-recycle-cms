@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# บุญมี รีไซเคิล — Price CMS
 
-## Getting Started
+ระบบจัดการราคารับซื้อของเก่าสำหรับร้านบุญมี รีไซเคิล
 
-First, run the development server:
+- **ปรับปรุงราคา** แก้ทุกรายการได้ในหน้าเดียว พิมพ์ราคาแล้วกด `Enter` ระบบจะบันทึกและไปแถวถัดไปให้ (`Shift+Enter` ย้อนกลับ, `↑/↓` เลื่อนแถว, `Esc` ยกเลิก)
+- **แนวโน้มราคา** แสดง ▲ ขึ้น / ▼ ลง พร้อมส่วนต่างและ sparkline จากประวัติแบบป้ายราคาน้ำมัน
+- **สินค้ารับซื้อ** datatable ค้นหา กรอง เรียงลำดับ แบ่งหน้า และสลับ active/inactive (ต้องกรอกหัวข้อกับราคา ส่วนรูปและรายละเอียดไม่บังคับ)
+- **หมวดหมู่** หมวดหลัก 1 : หมวดย่อยหลายหมวด และ **หน่วย** (master) ใช้เป็น dropdown
+- **ส่งออกใบราคา** ขนาด 1080×1920 เป็น PNG / PDF หรือแชร์เข้า LINE จากมือถือ
+- **Login + 2FA (TOTP)** ใช้กับ Google/Microsoft Authenticator ล็อกบัญชี 15 นาทีเมื่อใส่ผิด 5 ครั้ง
+
+Stack: Next.js 15 (App Router, Server Actions) · PostgreSQL · Drizzle ORM · Tailwind CSS v4
+
+## เริ่มใช้งาน (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env          # แล้วตั้ง SESSION_SECRET ใหม่ (openssl rand -base64 32)
+docker compose up -d          # Postgres ที่ localhost:54330
+npm install
+npm run db:migrate            # รัน migration
+npm run db:seed               # ใส่ข้อมูลตัวอย่าง + ผู้ใช้ admin
+npm run dev                   # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+เข้าสู่ระบบด้วย `ADMIN_USERNAME` / `ADMIN_PASSWORD` จาก `.env` (ค่าเริ่มต้น `admin` / `admin1234`)
+login ครั้งแรกระบบจะให้สแกน QR เพื่อผูกแอป Authenticator **เปลี่ยนรหัสผ่านที่หน้า ตั้งค่า หลัง login ครั้งแรก**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| คำสั่ง | ใช้ทำอะไร |
+| --- | --- |
+| `npm run db:generate` | สร้างไฟล์ migration ใหม่หลังแก้ `src/db/schema.ts` |
+| `npm run db:migrate` | รัน migration ที่ยังไม่ได้รัน |
+| `npm run db:seed` | seed ข้อมูล (ข้ามถ้ามีข้อมูลแล้ว) |
+| `npm run db:reset` | ล้างแคตตาล็อกแล้ว seed ใหม่ (ผู้ใช้ยังอยู่) |
+| `npm run db:studio` | เปิด Drizzle Studio |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### รีเซ็ต 2FA (กรณีทำมือถือหาย)
 
-## Learn More
+```sql
+UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE username = 'admin';
+```
 
-To learn more about Next.js, take a look at the following resources:
+login ครั้งถัดไปจะให้สแกน QR ใหม่
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy (ฟรี: Vercel + Neon)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. สร้างฐานข้อมูลที่ [neon.tech](https://neon.tech) (free tier) แล้วคัดลอก connection string แบบ **pooled**
+2. Import repo นี้ใน Vercel แล้วตั้ง env `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
+3. Build command `npm run vercel-build` (รัน migration ก่อน build)
+4. Seed ครั้งแรกจากเครื่อง: `DATABASE_URL=<neon-url> npm run db:seed`
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+รูปสินค้าเก็บในตาราง `images` (bytea) ย่อเป็น WebP ขนาดไม่เกิน 800px ฝั่ง browser ก่อนอัปโหลด จึงใช้กับ serverless ได้โดยไม่ต้องมี storage แยก

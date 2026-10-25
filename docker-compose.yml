@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: boonmee-cms-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: boonmee
+      POSTGRES_PASSWORD: boonmee
+      POSTGRES_DB: boonmee_cms
+    ports:
+      - "54330:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

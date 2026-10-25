@@ -1,0 +1,133 @@
+"use client";
+
+import {
+  FileImage,
+  FolderTree,
+  History,
+  LogOut,
+  Menu,
+  Package,
+  Ruler,
+  Settings,
+  TrendingUp,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { logoutAction } from "@/app/login/actions";
+import { cn } from "./ui";
+
+const NAV = [
+  {
+    group: "ราคา",
+    items: [
+      { href: "/prices", label: "ปรับปรุงราคา", icon: TrendingUp },
+      { href: "/history", label: "ประวัติราคา", icon: History },
+      { href: "/export", label: "ส่งออกใบราคา", icon: FileImage },
+    ],
+  },
+  {
+    group: "ข้อมูลหลัก",
+    items: [
+      { href: "/products", label: "สินค้ารับซื้อ", icon: Package },
+      { href: "/categories", label: "หมวดหมู่", icon: FolderTree },
+      { href: "/units", label: "หน่วย", icon: Ruler },
+    ],
+  },
+  { group: "ระบบ", items: [{ href: "/settings", label: "ตั้งค่า", icon: Settings }] },
+];
+
+const ALL = NAV.flatMap((g) => g.items);
+
+export function Shell({ user, children }: { user: { name: string }; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [pathname]);
+  const current = ALL.find((i) => pathname.startsWith(i.href));
+
+  return (
+    <div className="min-h-dvh lg:pl-64">
+      {/* sidebar */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-ink-900 text-brand-50 transition-transform lg:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <div className="flex h-16 items-center gap-3 px-5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="" className="size-9 rounded-xl" />
+          <div className="leading-tight">
+            <div className="font-semibold text-white">บุญมี รีไซเคิล</div>
+            <div className="text-xs text-brand-200/70">Price CMS</div>
+          </div>
+          <button className="ml-auto rounded p-1 text-brand-100 lg:hidden" onClick={() => setOpen(false)} aria-label="ปิดเมนู">
+            <X className="size-5" />
+          </button>
+        </div>
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+          {NAV.map((g) => (
+            <div key={g.group}>
+              <div className="mb-2 px-3 text-[11px] font-medium tracking-wider text-brand-200/50 uppercase">{g.group}</div>
+              <ul className="space-y-1">
+                {g.items.map(({ href, label, icon: Icon }) => {
+                  const active = pathname.startsWith(href);
+                  return (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                          active
+                            ? "bg-brand-500 font-medium text-white shadow-lg shadow-brand-900/40"
+                            : "text-brand-100/80 hover:bg-white/5 hover:text-white",
+                        )}
+                      >
+                        <Icon className="size-4.5" />
+                        {label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <div className="m-3 rounded-xl bg-white/5 p-3 text-xs text-brand-100/70">
+          เคล็ดลับ: หน้า <b className="text-white">ปรับปรุงราคา</b> กด <kbd className="rounded bg-white/10 px-1">Enter</kbd> เพื่อบันทึกและไปแถวถัดไป
+        </div>
+      </aside>
+      {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
+
+      {/* navbar */}
+      <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/85 px-4 backdrop-blur sm:px-6">
+        <button className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden" onClick={() => setOpen(true)} aria-label="เปิดเมนู">
+          <Menu className="size-5" />
+        </button>
+        <div className="text-sm text-slate-500">
+          <span className="hidden sm:inline">CMS / </span>
+          <span className="font-medium text-ink-900">{current?.label ?? "หน้าหลัก"}</span>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden text-sm text-slate-500 md:inline">
+            {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </span>
+          <div className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pr-1 pl-3">
+            <span className="text-sm font-medium text-slate-700">{user.name}</span>
+            <span className="grid size-7 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
+              {user.name.slice(0, 1).toUpperCase()}
+            </span>
+          </div>
+          <form action={logoutAction}>
+            <button className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-accent-500" title="ออกจากระบบ">
+              <LogOut className="size-4.5" />
+            </button>
+          </form>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>
+    </div>
+  );
+}
