@@ -15,6 +15,13 @@
       "when": 1792942090240,
       "tag": "0001_publish_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792942396402,
+      "tag": "0002_users_invitations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
+import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as s from "./schema";
@@ -106,6 +107,31 @@ const SETTINGS: Record<string, string> = {
   website: "boonmee-recycle.cc",
 };
 
+/**
+ * The super admin is identified by SUPER_ADMIN_EMAIL. Older databases used a username-only "admin"
+ * row; that row is upgraded in place so its password and 2FA keep working.
+ */
+async function ensureSuperAdmin(db: ReturnType<typeof drizzle<typeof s>>) {
+  const email = (process.env.SUPER_ADMIN_EMAIL || "mongkon.dev@gmail.com").trim().toLowerCase();
+  const existing = await db.query.users.findFirst({ where: eq(s.users.email, email) });
+  if (existing) {
+    if (existing.role !== "super") await db.update(s.users).set({ role: "super" }).where(eq(s.users.id, existing.id));
+    console.log(`• super admin ${email} exists`);
+    return;
+  }
+  const legacy = await db.query.users.findFirst({
+    where: and(eq(s.users.username, process.env.ADMIN_USERNAME || "admin"), isNull(s.users.email)),
+  });
+  if (legacy) {
+    await db.update(s.users).set({ email, role: "super" }).where(eq(s.users.id, legacy.id));
+    console.log(`✔ upgraded legacy admin → super admin ${email}`);
+    return;
+  }
+  const password = process.env.ADMIN_PASSWORD || "Admin@1234";
+  await db.insert(s.users).values({ email, role: "super", displayName: "Super Admin", passwordHash: await bcrypt.hash(password, 12) });
+  console.log(`✔ super admin ${email} created`);
+}
+
 async function main() {
   const client = postgres(process.env.DATABASE_URL!, { max: 1 });
   const db = drizzle(client, { schema: s });
@@ -169,14 +195,7 @@ async function main() {
     await db.insert(s.settings).values({ key, value }).onConflictDoNothing();
   }
 
-  const username = process.env.ADMIN_USERNAME || "admin";
-  const password = process.env.ADMIN_PASSWORD || "admin1234";
-  const inserted = await db
-    .insert(s.users)
-    .values({ username, displayName: "ผู้ดูแลระบบ", passwordHash: await bcrypt.hash(password, 12) })
-    .onConflictDoNothing()
-    .returning();
-  console.log(inserted.length ? `✔ admin user "${username}" created` : `• admin user "${username}" exists`);
+  await ensureSuperAdmin(db);
 
   await client.end();
 }

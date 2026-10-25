@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 
 export default async function CmsLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  return <Shell user={{ name: user.displayName || user.username }}>{children}</Shell>;
+  return <Shell user={{ name: user.displayName || user.email || user.username || "admin", role: user.role }}>{children}</Shell>;
 }

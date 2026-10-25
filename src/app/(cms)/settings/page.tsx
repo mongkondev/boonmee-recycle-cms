@@ -12,7 +12,7 @@ export default async function SettingsPage() {
       <PageHeader title="ตั้งค่า" />
       <div className="grid gap-6 lg:grid-cols-2">
         <ShopForm initial={settings} />
-        <AccountForm username={user.username} displayName={user.displayName ?? ""} />
+        <AccountForm email={user.email ?? user.username ?? ""} displayName={user.displayName ?? ""} />
       </div>
     </>
   );

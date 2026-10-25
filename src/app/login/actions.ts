@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { redirect } from "next/navigation";
 import { db, schema } from "@/db";
 import { clearSession, getSession, setSession } from "@/lib/auth";
+import { normalizeEmail } from "@/lib/password-policy";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_MINUTES = 15;
@@ -42,21 +43,21 @@ async function resetFailures(u: User) {
 }
 
 export async function loginAction(_: FormState, form: FormData): Promise<FormState> {
-  const username = String(form.get("username") ?? "").trim();
+  const email = normalizeEmail(String(form.get("email") ?? ""));
   const password = String(form.get("password") ?? "");
-  if (!username || !password) return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน" };
+  if (!email || !password) return { error: "กรุณากรอกอีเมลและรหัสผ่าน" };
 
-  const user = await db.query.users.findFirst({ where: eq(schema.users.username, username) });
-  if (!user) {
+  const user = await db.query.users.findFirst({ where: eq(schema.users.email, email) });
+  if (!user || !user.isActive) {
     await bcrypt.hash(password, 12); // keep timing similar for unknown users
-    return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" };
+    return { error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" };
   }
   const locked = lockedMessage(user);
   if (locked) return { error: locked };
 
   if (!(await bcrypt.compare(password, user.passwordHash))) {
     await registerFailure(user);
-    return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" };
+    return { error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" };
   }
 
   if (user.totpEnabled) {
@@ -78,13 +79,13 @@ async function pendingUser(stage: "verify" | "setup") {
   const s = await getSession();
   if (!s || s.stage !== stage) redirect("/login");
   const user = await db.query.users.findFirst({ where: eq(schema.users.id, s.uid) });
-  if (!user?.totpSecret) redirect("/login");
+  if (!user?.totpSecret || !user.isActive) redirect("/login");
   return user;
 }
 
 export async function getSetupQr() {
   const user = await pendingUser("setup");
-  const uri = generateURI({ issuer: "Boonmee Recycle CMS", label: user.username, secret: user.totpSecret! });
+  const uri = generateURI({ issuer: "Boonmee Recycle CMS", label: user.email ?? user.username ?? "admin", secret: user.totpSecret! });
   return { secret: user.totpSecret!, qr: await QRCode.toDataURL(uri, { margin: 1, width: 220 }) };
 }
 

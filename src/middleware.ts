@@ -7,6 +7,8 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const session = await readSession(req.cookies.get(SESSION_COOKIE)?.value);
 
+  if (pathname.startsWith("/invite/")) return NextResponse.next();
+
   if (pathname.startsWith("/login")) {
     if (session?.stage === "full") return NextResponse.redirect(new URL("/", req.url));
     // stage pages need the matching half-login cookie

@@ -28,6 +28,13 @@ export async function requireUser() {
   const s = await getSession();
   if (!s || s.stage !== "full") redirect("/login");
   const user = await db.query.users.findFirst({ where: eq(schema.users.id, s.uid) });
-  if (!user || !user.totpEnabled) redirect("/login");
+  if (!user || !user.totpEnabled || !user.isActive) redirect("/login");
+  return user;
+}
+
+/** Super-admin-only pages and actions. */
+export async function requireSuper() {
+  const user = await requireUser();
+  if (user.role !== "super") redirect("/prices");
   return user;
 }

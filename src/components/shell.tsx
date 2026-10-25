@@ -11,6 +11,7 @@ import {
   Ruler,
   Settings,
   TrendingUp,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -19,7 +20,7 @@ import { useEffect, useState } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { cn } from "./ui";
 
-const NAV = [
+const NAV: { group: string; items: { href: string; label: string; icon: typeof Settings; superOnly?: boolean }[] }[] = [
   {
     group: "ราคา",
     items: [
@@ -37,12 +38,18 @@ const NAV = [
       { href: "/units", label: "หน่วย", icon: Ruler },
     ],
   },
-  { group: "ระบบ", items: [{ href: "/settings", label: "ตั้งค่า", icon: Settings }] },
+  {
+    group: "ระบบ",
+    items: [
+      { href: "/users", label: "ผู้ดูแลระบบ", icon: Users, superOnly: true },
+      { href: "/settings", label: "ตั้งค่า", icon: Settings },
+    ],
+  },
 ];
 
 const ALL = NAV.flatMap((g) => g.items);
 
-export function Shell({ user, children }: { user: { name: string }; children: React.ReactNode }) {
+export function Shell({ user, children }: { user: { name: string; role: "super" | "admin" }; children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
@@ -73,7 +80,7 @@ export function Shell({ user, children }: { user: { name: string }; children: Re
             <div key={g.group}>
               <div className="mb-2 px-3 text-[11px] font-medium tracking-wider text-brand-200/50 uppercase">{g.group}</div>
               <ul className="space-y-1">
-                {g.items.map(({ href, label, icon: Icon }) => {
+                {g.items.filter((i) => !i.superOnly || user.role === "super").map(({ href, label, icon: Icon }) => {
                   const active = pathname.startsWith(href);
                   return (
                     <li key={href}>
@@ -117,6 +124,7 @@ export function Shell({ user, children }: { user: { name: string }; children: Re
           </span>
           <div className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pr-1 pl-3">
             <span className="text-sm font-medium text-slate-700">{user.name}</span>
+            {user.role === "super" && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold text-white">SUPER</span>}
             <span className="grid size-7 place-items-center rounded-full bg-brand-500 text-xs font-semibold text-white">
               {user.name.slice(0, 1).toUpperCase()}
             </span>

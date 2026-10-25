@@ -24,7 +24,11 @@ const money = customType<{ data: number; driverData: string }>({
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
+  // legacy login name (pre-email); kept nullable for old rows
+  username: text("username").unique(),
+  email: text("email").unique(),
+  role: text("role", { enum: ["super", "admin"] }).notNull().default("admin"),
+  isActive: boolean("is_active").notNull().default(true),
   displayName: text("display_name"),
   passwordHash: text("password_hash").notNull(),
   totpSecret: text("totp_secret"),
@@ -142,3 +146,16 @@ export const publicationPages = pgTable(
   },
   (t) => [index("publication_pages_pub_idx").on(t.publicationId, t.pageNo)],
 );
+
+/** Admin invitation link. Only the SHA-256 of the token is stored. */
+export const invitations = pgTable("invitations", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  displayName: text("display_name"),
+  role: text("role", { enum: ["super", "admin"] }).notNull().default("admin"),
+  tokenHash: text("token_hash").notNull().unique(),
+  invitedBy: integer("invited_by").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

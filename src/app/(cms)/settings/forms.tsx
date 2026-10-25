@@ -3,6 +3,7 @@
 import { Save, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { PasswordFields } from "@/components/password-fields";
 import { Button, Card, FormError, Input, Label } from "@/components/ui";
 import { changePassword, saveSettings } from "@/lib/actions";
 import type { ShopSettings } from "@/lib/types";
@@ -52,9 +53,9 @@ export function ShopForm({ initial }: { initial: ShopSettings }) {
   );
 }
 
-export function AccountForm({ username, displayName }: { username: string; displayName: string }) {
+export function AccountForm({ email, displayName }: { email: string; displayName: string }) {
   const router = useRouter();
-  const [v, setV] = useState({ displayName, current: "", next: "" });
+  const [v, setV] = useState({ displayName, current: "", next: "", confirm: "" });
   const [error, setError] = useState<string>();
   const [ok, setOk] = useState(false);
   const [pending, start] = useTransition();
@@ -62,7 +63,7 @@ export function AccountForm({ username, displayName }: { username: string; displ
     <Card className="h-fit p-6">
       <h2 className="mb-1 font-semibold text-ink-900">บัญชีผู้ใช้</h2>
       <p className="mb-5 flex items-center gap-1.5 text-sm text-slate-500">
-        <ShieldCheck className="size-4 text-brand-500" /> {username} · เปิดใช้งาน 2FA แล้ว
+        <ShieldCheck className="size-4 text-brand-500" /> {email} · เปิดใช้งาน 2FA แล้ว
       </p>
       <form
         className="space-y-4"
@@ -71,10 +72,11 @@ export function AccountForm({ username, displayName }: { username: string; displ
           setError(undefined);
           setOk(false);
           start(async () => {
+            if (v.next && v.next !== v.confirm) return setError("ยืนยันรหัสผ่านไม่ตรงกัน");
             const res = await changePassword(v);
             if (!res.ok) return setError(res.error);
             setOk(true);
-            setV((s) => ({ ...s, current: "", next: "" }));
+            setV((s) => ({ ...s, current: "", next: "", confirm: "" }));
             router.refresh();
           });
         }}
@@ -87,9 +89,15 @@ export function AccountForm({ username, displayName }: { username: string; displ
           <Label htmlFor="current">รหัสผ่านปัจจุบัน</Label>
           <Input id="current" type="password" autoComplete="current-password" value={v.current} onChange={(e) => setV({ ...v, current: e.target.value })} />
         </div>
-        <div>
-          <Label htmlFor="next">รหัสผ่านใหม่</Label>
-          <Input id="next" type="password" autoComplete="new-password" value={v.next} onChange={(e) => setV({ ...v, next: e.target.value })} placeholder="เว้นว่างถ้าไม่เปลี่ยน (อย่างน้อย 8 ตัว)" />
+        <div className="rounded-lg bg-slate-50 p-4">
+          <p className="mb-3 text-xs text-slate-500">เปลี่ยนรหัสผ่าน (เว้นว่างถ้าไม่เปลี่ยน)</p>
+          <PasswordFields
+            label="รหัสผ่านใหม่"
+            password={v.next}
+            confirm={v.confirm}
+            onPassword={(next) => setV({ ...v, next })}
+            onConfirm={(confirm) => setV({ ...v, confirm })}
+          />
         </div>
         <FormError message={error} />
         <div className="flex items-center gap-3">

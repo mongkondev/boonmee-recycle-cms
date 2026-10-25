@@ -9,8 +9,8 @@ export function LoginForm() {
   return (
     <form action={action} className="space-y-4">
       <div>
-        <Label htmlFor="username">ชื่อผู้ใช้</Label>
-        <Input id="username" name="username" autoComplete="username" autoFocus required />
+        <Label htmlFor="email">อีเมล</Label>
+        <Input id="email" name="email" type="email" autoComplete="username" autoFocus required placeholder="you@example.com" />
       </div>
       <div>
         <Label htmlFor="password">รหัสผ่าน</Label>

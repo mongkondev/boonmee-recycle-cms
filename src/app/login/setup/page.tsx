@@ -1,12 +1,14 @@
 import { getSetupQr } from "../actions";
+import { Steps } from "@/components/steps";
 import { CodeForm } from "../forms";
 
 export const metadata = { title: "ตั้งค่า 2FA" };
 
-export default async function SetupPage() {
-  const { qr, secret } = await getSetupQr();
+export default async function SetupPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
+  const [{ qr, secret }, { step }] = await Promise.all([getSetupQr(), searchParams]);
   return (
     <>
+      {step === "2" && <Steps current={2} />}
       <h2 className="font-semibold text-ink-900">ตั้งค่าการยืนยัน 2 ขั้นตอน</h2>
       <ol className="mt-2 mb-4 list-decimal space-y-1 pl-5 text-sm text-slate-600">
         <li>ติดตั้ง Google Authenticator / Microsoft Authenticator</li>

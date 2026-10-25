@@ -99,7 +99,7 @@ export async function getSettings(): Promise<ShopSettings> {
 export async function getHistory(limit = 300) {
   const rows = await db.execute<Record<string, unknown>>(sql`
     select h.id, h.product_id, p.title, h.old_price, h.new_price, h.changed_at,
-           coalesce(us.display_name, us.username) as changed_by, mc.name as main_name, sc.name as sub_name, u.name as unit_name
+           coalesce(us.display_name, us.email, us.username) as changed_by, mc.name as main_name, sc.name as sub_name, u.name as unit_name
     from price_history h
     join products p on p.id = h.product_id
     join sub_categories sc on sc.id = p.sub_category_id
@@ -125,7 +125,7 @@ export async function getHistory(limit = 300) {
 
 export async function getPublications() {
   const rows = await db.execute<Record<string, unknown>>(sql`
-    select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.username) as published_by,
+    select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.email, u.username) as published_by,
            (select count(*)::int from publication_pages pp where pp.publication_id = pb.id) as page_count,
            (select pp.image_id from publication_pages pp where pp.publication_id = pb.id order by pp.page_no limit 1) as cover_id
     from publications pb left join users u on u.id = pb.published_by
@@ -168,6 +168,36 @@ export async function getPublication(id: number) {
       oldPrice: c.old_price === null ? null : Number(c.old_price),
       newPrice: Number(c.new_price),
       unitName: c.unit_name as string | null,
+    })),
+  };
+}
+
+export async function getUsersAndInvites() {
+  const users = await db.execute<Record<string, unknown>>(sql`
+    select id, email, username, display_name, role, is_active, totp_enabled, created_at from users order by role desc, id
+  `);
+  const invites = await db.execute<Record<string, unknown>>(sql`
+    select i.id, i.email, i.display_name, i.expires_at, i.created_at, coalesce(u.display_name, u.email) as invited_by
+    from invitations i left join users u on u.id = i.invited_by
+    where i.accepted_at is null order by i.created_at desc
+  `);
+  return {
+    users: users.map((u) => ({
+      id: u.id as number,
+      email: (u.email ?? u.username) as string,
+      displayName: u.display_name as string | null,
+      role: u.role as "super" | "admin",
+      isActive: u.is_active as boolean,
+      totpEnabled: u.totp_enabled as boolean,
+      createdAt: new Date(u.created_at as string).toISOString(),
+    })),
+    invites: invites.map((i) => ({
+      id: i.id as number,
+      email: i.email as string,
+      displayName: i.display_name as string | null,
+      expiresAt: new Date(i.expires_at as string).toISOString(),
+      expired: new Date(i.expires_at as string) < new Date(),
+      invitedBy: i.invited_by as string | null,
     })),
   };
 }

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireUser } from "./auth";
 import { buildMenu } from "./menu";
+import { passwordProblems } from "./password-policy";
 import { getProducts, getSettings } from "./queries";
 import type { ShopSettings } from "./types";
 
@@ -346,7 +347,8 @@ export async function changePassword(input: { current: string; next: string; dis
   const displayName = input.displayName.trim().slice(0, 60) || null;
   if (input.next) {
     if (!(await bcrypt.compare(input.current, user.passwordHash))) return fail("รหัสผ่านปัจจุบันไม่ถูกต้อง");
-    if (input.next.length < 8) return fail("รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร");
+    const problems = passwordProblems(input.next);
+    if (problems.length) return fail(`รหัสผ่านใหม่ยังไม่ผ่านเงื่อนไข: ${problems.join(", ")}`);
     await db
       .update(schema.users)
       .set({ passwordHash: await bcrypt.hash(input.next, 12), displayName })
