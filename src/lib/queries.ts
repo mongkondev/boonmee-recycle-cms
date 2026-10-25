@@ -9,12 +9,12 @@ type Executor = Pick<typeof db, "execute">;
 export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
   const rows = await exec.execute<Record<string, unknown>>(sql`
     select p.id, p.title, p.description, p.image_id, p.price, p.draft_price, p.price_note, p.unit_id, u.name as unit_name,
-           p.is_active, p.sort_order, p.sub_category_id, sc.name as sub_name, sc.is_active as sub_active,
-           sc.main_category_id, mc.name as main_name, mc.is_active as main_active,
+           p.is_active, p.sort_order, p.sub_category_id, sc.name as sub_name, coalesce(sc.is_active, true) as sub_active,
+           p.main_category_id, mc.name as main_name, mc.is_active as main_active,
            lh.old_price as prev_price, lh.changed_at as last_changed, sp.spark
     from products p
-    join sub_categories sc on sc.id = p.sub_category_id
-    join main_categories mc on mc.id = sc.main_category_id
+    join main_categories mc on mc.id = p.main_category_id
+    left join sub_categories sc on sc.id = p.sub_category_id
     left join units u on u.id = p.unit_id
     left join lateral (
       select h.old_price, h.changed_at from price_history h
@@ -26,7 +26,8 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
         where h.product_id = p.id order by h.changed_at desc, h.id desc limit 10
       ) x
     ) sp on true
-    order by mc.sort_order, mc.id, sc.sort_order, sc.id, p.sort_order, p.id
+    -- products without a sub category come first inside their main category
+    order by mc.sort_order, mc.id, sc.sort_order nulls first, sc.id nulls first, p.sort_order, p.id
   `);
   return rows.map((r) => ({
     id: r.id as number,
@@ -40,8 +41,8 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
     unitName: r.unit_name as string | null,
     isActive: r.is_active as boolean,
     sortOrder: r.sort_order as number,
-    subCategoryId: r.sub_category_id as number,
-    subName: r.sub_name as string,
+    subCategoryId: r.sub_category_id as number | null,
+    subName: r.sub_name as string | null,
     subActive: r.sub_active as boolean,
     mainCategoryId: r.main_category_id as number,
     mainName: r.main_name as string,
@@ -53,10 +54,11 @@ export async function getProducts(exec: Executor = db): Promise<ProductRow[]> {
 }
 
 export async function getCategoryTree(): Promise<CategoryTree> {
-  const mains = await db
-    .select()
-    .from(schema.mainCategories)
-    .orderBy(asc(schema.mainCategories.sortOrder), asc(schema.mainCategories.id));
+  const mains = await db.execute<{ id: number; name: string; sort_order: number; is_active: boolean; direct_count: number }>(sql`
+    select m.id, m.name, m.sort_order, m.is_active,
+           (select count(*)::int from products p where p.main_category_id = m.id and p.sub_category_id is null) as direct_count
+    from main_categories m order by m.sort_order, m.id
+  `);
   const subs = await db.execute<{ id: number; main_category_id: number; name: string; sort_order: number; is_active: boolean; product_count: number }>(sql`
     select sc.id, sc.main_category_id, sc.name, sc.sort_order, sc.is_active,
            (select count(*)::int from products p where p.sub_category_id = sc.id) as product_count
@@ -65,8 +67,9 @@ export async function getCategoryTree(): Promise<CategoryTree> {
   return mains.map((m) => ({
     id: m.id,
     name: m.name,
-    sortOrder: m.sortOrder,
-    isActive: m.isActive,
+    sortOrder: m.sort_order,
+    isActive: m.is_active,
+    directCount: m.direct_count,
     subs: subs
       .filter((s) => s.main_category_id === m.id)
       .map((s) => ({ id: s.id, name: s.name, sortOrder: s.sort_order, isActive: s.is_active, productCount: s.product_count })),
@@ -102,8 +105,8 @@ export async function getHistory(limit = 300) {
            coalesce(us.display_name, us.email, us.username) as changed_by, mc.name as main_name, sc.name as sub_name, u.name as unit_name
     from price_history h
     join products p on p.id = h.product_id
-    join sub_categories sc on sc.id = p.sub_category_id
-    join main_categories mc on mc.id = sc.main_category_id
+    join main_categories mc on mc.id = p.main_category_id
+    left join sub_categories sc on sc.id = p.sub_category_id
     left join units u on u.id = p.unit_id
     left join users us on us.id = h.changed_by
     where h.old_price is not null
@@ -118,7 +121,7 @@ export async function getHistory(limit = 300) {
     changedAt: new Date(r.changed_at as string).toISOString(),
     changedBy: r.changed_by as string | null,
     mainName: r.main_name as string,
-    subName: r.sub_name as string,
+    subName: r.sub_name as string | null,
     unitName: r.unit_name as string | null,
   }));
 }
@@ -127,7 +130,7 @@ export async function getPublications() {
   const rows = await db.execute<Record<string, unknown>>(sql`
     select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.email, u.username) as published_by,
            (select count(*)::int from publication_pages pp where pp.publication_id = pb.id) as page_count,
-           (select pp.image_id from publication_pages pp where pp.publication_id = pb.id order by pp.page_no limit 1) as cover_id
+           (select json_agg(pp.image_id order by pp.page_no) from publication_pages pp where pp.publication_id = pb.id) as page_ids
     from publications pb left join users u on u.id = pb.published_by
     order by pb.published_at desc, pb.id desc limit 100
   `);
@@ -138,7 +141,7 @@ export async function getPublications() {
     publishedAt: new Date(r.published_at as string).toISOString(),
     publishedBy: r.published_by as string | null,
     pageCount: r.page_count as number,
-    coverId: r.cover_id as string | null,
+    pageIds: (r.page_ids as string[] | null) ?? [],
   }));
 }
 

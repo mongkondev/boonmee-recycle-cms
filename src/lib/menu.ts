@@ -1,4 +1,4 @@
-import { fmtPrice } from "./trend";
+import { priceLabel } from "./trend";
 import type { ProductRow, ShopSettings } from "./types";
 
 /** Frozen menu data stored with each publication, so old menus re-render exactly as published. */
@@ -11,7 +11,8 @@ export type MenuItem = {
   price: number;
   prevPrice: number | null;
 };
-export type MenuSub = { name: string; items: MenuItem[] };
+/** name is null for products placed directly under the main category */
+export type MenuSub = { name: string | null; items: MenuItem[] };
 export type MenuMain = { name: string; subs: MenuSub[] };
 export type MenuSnapshot = { settings: ShopSettings; mains: MenuMain[] };
 
@@ -26,7 +27,7 @@ export function buildMenu(products: ProductRow[], settings: ShopSettings): MenuS
     s.items.push({
       id: p.id,
       title: p.title,
-      priceText: p.priceNote || fmtPrice(p.price),
+      priceText: priceLabel(p),
       unitName: p.unitName,
       imageId: p.imageId,
       price: p.price,
@@ -60,7 +61,7 @@ export type MenuPage = { blocks: MenuBlock[] };
 const blockHeight = (rows: number) => A4.pill + A4.pillGap + Math.ceil(rows / 2) * A4.row + A4.blockGap;
 const rowsOf = (subs: MenuSub[], showSub: boolean): MenuRow[] =>
   subs.flatMap((s) => [
-    ...(showSub ? [{ kind: "sub" as const, name: s.name }] : []),
+    ...(showSub && s.name ? [{ kind: "sub" as const, name: s.name }] : []),
     ...s.items.map((item) => ({ kind: "item" as const, item })),
   ]);
 

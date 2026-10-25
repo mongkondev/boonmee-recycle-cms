@@ -3,7 +3,7 @@
 import { Clock, Globe, Phone } from "lucide-react";
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import { RecycleMark } from "@/components/recycle-mark";
-import { fmtPrice, trendOf } from "@/lib/trend";
+import { priceLabel, trendOf } from "@/lib/trend";
 import type { ProductRow, ShopSettings } from "@/lib/types";
 
 export const POSTER_W = 1080;
@@ -22,7 +22,7 @@ export type PosterOptions = {
 
 export type PosterData = {
   mainName: string;
-  sections: { name: string; items: ProductRow[] }[];
+  sections: { name: string | null; items: ProductRow[] }[];
 };
 
 /**
@@ -111,8 +111,8 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
             className="h-fit"
           >
             {data.sections.map((sec) => (
-              <section key={sec.name} className="mb-[0.7em] break-inside-avoid-column rounded-[32px] bg-white/90 px-[0.55em] py-[0.45em] shadow-[0_8px_30px_-12px_rgba(0,48,32,0.18)] ring-1 ring-[#3a9e1d]/10">
-                {options.showSubName && (
+              <section key={sec.name ?? "_direct"} className="mb-[0.7em] break-inside-avoid-column rounded-[32px] bg-white/90 px-[0.55em] py-[0.45em] shadow-[0_8px_30px_-12px_rgba(0,48,32,0.18)] ring-1 ring-[#3a9e1d]/10">
+                {options.showSubName && sec.name && (
                   <div className="mb-[0.2em] flex items-center gap-[0.35em] px-[0.4em] text-[0.62em] font-semibold text-[#2f8217]">
                     <span className="size-[0.45em] rounded-full bg-[#3a9e1d]" />
                     {sec.name}
@@ -139,7 +139,7 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
                         {options.showTrend && (t.dir === "up" || t.dir === "down") && (
                           <span className={`text-[0.55em] ${t.dir === "up" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>{t.dir === "up" ? "▲" : "▼"}</span>
                         )}
-                        <span className="font-bold whitespace-nowrap text-[#e2572c] tabular-nums">{p.priceNote || fmtPrice(p.price)}</span>
+                        <span className="font-bold whitespace-nowrap text-[#e2572c] tabular-nums">{priceLabel(p)}</span>
                         {options.showUnit && p.unitName && <span className="text-[0.6em] whitespace-nowrap text-slate-500">/{p.unitName}</span>}
                       </li>
                     );

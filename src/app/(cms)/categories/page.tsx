@@ -8,7 +8,7 @@ export default async function CategoriesPage() {
   const tree = await getCategoryTree();
   return (
     <>
-      <PageHeader title="หมวดหมู่สินค้า" description="หมวดหมู่หลัก 1 หมวด มีได้หลายหมวดย่อย — หมวดย่อยจะเป็นกลุ่มรายการภายใต้หัวข้อหมวดหลักบนเมนูราคา" />
+      <PageHeader title="หมวดหมู่สินค้า" description="สินค้าต้องอยู่ในหมวดหลัก ส่วนหมวดย่อยไม่บังคับ ใช้จัดกลุ่มรายการภายใต้หัวข้อหมวดหลักบนเมนูราคา" />
       <CategoryManager tree={tree} />
     </>
   );

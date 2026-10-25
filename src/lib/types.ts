@@ -11,8 +11,10 @@ export type ProductRow = {
   unitName: string | null;
   isActive: boolean;
   sortOrder: number;
-  subCategoryId: number;
-  subName: string;
+  /** optional grouping inside the main category */
+  subCategoryId: number | null;
+  subName: string | null;
+  /** true when there is no sub category */
   subActive: boolean;
   mainCategoryId: number;
   mainName: string;
@@ -29,6 +31,8 @@ export type CategoryTree = {
   name: string;
   sortOrder: number;
   isActive: boolean;
+  /** products attached to the main category without a sub category */
+  directCount: number;
   subs: { id: number; name: string; sortOrder: number; isActive: boolean; productCount: number }[];
 }[];
 

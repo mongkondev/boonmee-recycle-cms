@@ -2,6 +2,7 @@ import { FileImage, Megaphone } from "lucide-react";
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { getPublications } from "@/lib/queries";
+import { PubDownloads } from "./pub-downloads";
 import { fmtDate } from "@/lib/trend";
 
 export const metadata = { title: "ประกาศราคา" };
@@ -10,7 +11,7 @@ export default async function PublicationsPage() {
   const pubs = await getPublications();
   return (
     <>
-      <PageHeader title="ประกาศราคา (Publish)" description="ทุกครั้งที่ Publish ระบบเก็บเมนูราคา A4 ไว้ ดาวน์โหลด/แชร์ส่งลูกค้าย้อนหลังได้" />
+      <PageHeader title="ประวัติการ Publish" description="ทุกครั้งที่ Publish ระบบสร้างประวัติและเก็บเมนูราคา A4 ไว้ ดาวน์โหลดไฟล์รอบก่อนๆ ส่งลูกค้าได้ทุกเมื่อ" />
       {pubs.length === 0 ? (
         <Card className="p-12 text-center text-slate-400">
           <Megaphone className="mx-auto mb-3 size-8" />
@@ -22,9 +23,9 @@ export default async function PublicationsPage() {
             <Link key={p.id} href={`/publications/${p.id}`} className="group">
               <Card className="overflow-hidden transition group-hover:shadow-md group-hover:ring-2 group-hover:ring-brand-200">
                 <div className="relative aspect-[210/297] bg-slate-100">
-                  {p.coverId ? (
+                  {p.pageIds[0] ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`/api/images/${p.coverId}`} alt="" className="size-full object-cover object-top" loading="lazy" />
+                    <img src={`/api/images/${p.pageIds[0]}`} alt="" className="size-full object-cover object-top" loading="lazy" />
                   ) : (
                     <div className="grid size-full place-items-center text-slate-300">
                       <FileImage className="size-10" />
@@ -39,6 +40,7 @@ export default async function PublicationsPage() {
                     เปลี่ยน {p.changeCount} รายการ · โดย {p.publishedBy ?? "—"}
                   </div>
                   {p.note && <div className="mt-2 line-clamp-2 text-sm text-slate-600">{p.note}</div>}
+                  <PubDownloads id={p.id} publishedAt={p.publishedAt} pageIds={p.pageIds} />
                 </div>
               </Card>
             </Link>

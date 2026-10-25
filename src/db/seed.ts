@@ -164,6 +164,7 @@ async function main() {
           const [p] = await db
             .insert(s.products)
             .values({
+              mainCategoryId: main.id,
               subCategoryId: subRow.id,
               title,
               price,

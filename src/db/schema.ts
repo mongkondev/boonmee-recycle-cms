@@ -79,9 +79,11 @@ export const products = pgTable(
   "products",
   {
     id: serial("id").primaryKey(),
-    subCategoryId: integer("sub_category_id")
+    mainCategoryId: integer("main_category_id")
       .notNull()
-      .references(() => subCategories.id, { onDelete: "restrict" }),
+      .references(() => mainCategories.id, { onDelete: "restrict" }),
+    // optional grouping inside the main category
+    subCategoryId: integer("sub_category_id").references(() => subCategories.id, { onDelete: "restrict" }),
     title: text("title").notNull(),
     description: text("description"),
     imageId: uuid("image_id").references(() => images.id, { onDelete: "set null" }),
@@ -96,7 +98,7 @@ export const products = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("products_sub_idx").on(t.subCategoryId)],
+  (t) => [index("products_main_idx").on(t.mainCategoryId), index("products_sub_idx").on(t.subCategoryId)],
 );
 
 export const priceHistory = pgTable(

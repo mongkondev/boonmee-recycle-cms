@@ -7,7 +7,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Sparkline, Thumb, TrendBadge } from "@/components/trend";
 import { Card, cn, Select, Toggle } from "@/components/ui";
 import { deleteProduct, setProductActive } from "@/lib/actions";
-import { fmtDate, fmtPrice, trendOf } from "@/lib/trend";
+import { fmtDate, fmtPrice, priceLabel, trendOf } from "@/lib/trend";
 import type { CategoryTree, ProductRow } from "@/lib/types";
 
 type SortKey = "default" | "title" | "price" | "change" | "updated";
@@ -145,11 +145,12 @@ export function ProductTable({ rows, tree }: { rows: ProductRow[]; tree: Categor
                     </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="text-slate-700">{r.subName}</div>
-                    <div className="text-xs text-slate-400">{r.mainName}</div>
+                    <div className="text-slate-700">{r.mainName}</div>
+                    {r.subName && <div className="text-xs text-slate-400">› {r.subName}</div>}
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <div className="font-semibold text-ink-900 tabular-nums">{r.priceNote || fmtPrice(r.price)}</div>
+                    <div className="font-semibold text-ink-900 tabular-nums">{priceLabel(r)}</div>
+                    {r.draftPrice !== null && <div className="text-xs text-amber-600 tabular-nums">ร่าง {fmtPrice(r.draftPrice)}</div>}
                     <div className="text-xs text-slate-400">{r.unitName ? `บาท/${r.unitName}` : "บาท"}</div>
                   </td>
                   <td className="px-3 py-2.5"><TrendBadge price={r.price} prev={r.prevPrice} /></td>

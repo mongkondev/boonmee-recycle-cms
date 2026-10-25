@@ -3,10 +3,11 @@
 import { Check, CornerDownLeft, LoaderCircle, Megaphone, Save, Search, TriangleAlert, Undo2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { PriceInput, toPriceInput } from "@/components/price-input";
 import { Sparkline, Thumb, TrendBadge } from "@/components/trend";
 import { Button, Card, cn, Toggle } from "@/components/ui";
 import { discardDrafts, publish, saveDraft } from "@/lib/actions";
-import { fmtDate, fmtPrice, trendOf } from "@/lib/trend";
+import { fmtDate, fmtPrice, fmtPriceNote, trendOf } from "@/lib/trend";
 import type { ProductRow } from "@/lib/types";
 
 type RowStatus = { state: "saving" | "saved" | "error"; message?: string; at: number };
@@ -44,7 +45,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
       (r) =>
         (showInactive || (r.isActive && r.subActive && r.mainActive)) &&
         (mainId === "all" || r.mainCategoryId === mainId) &&
-        (!q || r.title.toLowerCase().includes(q) || r.subName.toLowerCase().includes(q)),
+        (!q || r.title.toLowerCase().includes(q) || (r.subName ?? "").toLowerCase().includes(q)),
     );
   }, [rows, query, mainId, showInactive]);
 
@@ -152,7 +153,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
 
   // group visible rows: main → sub
   let lastMain = -1;
-  let lastSub = -1;
+  let lastSub: number | null = -1;
 
   return (
     <div className="space-y-4">
@@ -250,7 +251,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                       </td>
                     </tr>
                   )}
-                  {r.subCategoryId !== lastSub && (
+                  {(r.subCategoryId !== lastSub || r.mainCategoryId !== lastMain) && r.subName && (
                     <tr className="border-b border-brand-100 bg-brand-50">
                       <td colSpan={9} className="px-4 py-1.5 text-xs font-semibold text-brand-700">
                         <span className="mr-2 inline-block size-1.5 rounded-full bg-brand-500 align-middle" />
@@ -285,7 +286,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                         <span className="hidden sm:block"><Thumb imageId={r.imageId} alt={r.title} size={32} /></span>
                         <div className="min-w-0">
                           <div className="font-medium text-slate-800 md:truncate">{r.title}</div>
-                          {r.priceNote && <div className="text-xs text-slate-400">แสดงบนเมนูราคา: {r.priceNote}</div>}
+                          {r.priceNote && <div className="text-xs text-slate-400">แสดงบนเมนูราคา: {fmtPriceNote(r.priceNote)}</div>}
                         </div>
                       </div>
                     </td>
@@ -309,14 +310,13 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                       <Sparkline values={r.spark} />
                     </td>
                     <td className="px-2 py-1.5">
-                      <input
+                      <PriceInput
                         ref={(el) => {
                           if (el) inputs.current.set(r.id, el);
                           else inputs.current.delete(r.id);
                         }}
-                        inputMode="decimal"
-                        value={draft ?? String(r.draftPrice ?? r.price)}
-                        onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value.replace(/[^\d.,]/g, "") }))}
+                        value={draft ?? toPriceInput(r.draftPrice ?? r.price)}
+                        onValueChange={(v) => setDrafts((d) => ({ ...d, [r.id]: v }))}
                         onKeyDown={(e) => onKeyDown(e, r)}
                         onFocus={(e) => e.currentTarget.select()}
                         aria-label={`ราคา ${r.title}`}

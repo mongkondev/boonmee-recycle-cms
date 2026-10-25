@@ -10,6 +10,12 @@ export function trendOf(price: number, prev: number | null): Trend {
 export const fmtPrice = (n: number) =>
   n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+/** Numbers inside a free-text price such as "3000-30000" or "100+" get thousands separators. */
+export const fmtPriceNote = (note: string) => note.replace(/\d+(?:\.\d+)?/g, (n) => fmtPrice(Number(n)));
+
+export const priceLabel = (p: { price: number; priceNote: string | null }) =>
+  p.priceNote ? fmtPriceNote(p.priceNote) : fmtPrice(p.price);
+
 export const fmtDate = (d: string | Date | null) =>
   d
     ? new Date(d).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db, schema } from "@/db";
 import { PageHeader } from "@/components/ui";
 import { getCategoryTree, getUnits } from "@/lib/queries";
+import { toPriceInput } from "@/components/price-input";
 import { ProductForm } from "../product-form";
 
 export const metadata = { title: "แก้ไขสินค้า" };
@@ -16,7 +17,6 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     getUnits(),
   ]);
   if (!p) notFound();
-  const main = tree.find((m) => m.subs.some((s) => s.id === p.subCategoryId));
   return (
     <>
       <PageHeader title="แก้ไขสินค้า" description={p.title} />
@@ -27,12 +27,12 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
           id: p.id,
           title: p.title,
           description: p.description ?? "",
-          price: String(p.draftPrice ?? p.price),
+          price: toPriceInput(p.draftPrice ?? p.price),
           livePrice: p.price,
           priceNote: p.priceNote ?? "",
           unitId: p.unitId ? String(p.unitId) : "",
-          mainCategoryId: main ? String(main.id) : "",
-          subCategoryId: String(p.subCategoryId),
+          mainCategoryId: String(p.mainCategoryId),
+          subCategoryId: p.subCategoryId ? String(p.subCategoryId) : "",
           isActive: p.isActive,
           imageId: p.imageId,
         }}

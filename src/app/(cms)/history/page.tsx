@@ -1,3 +1,4 @@
+import { FileDown } from "lucide-react";
 import Link from "next/link";
 import { TrendBadge } from "@/components/trend";
 import { Card, PageHeader } from "@/components/ui";
@@ -10,7 +11,15 @@ export default async function HistoryPage() {
   const rows = await getHistory();
   return (
     <>
-      <PageHeader title="ประวัติการปรับราคา" description="300 รายการล่าสุด" />
+      <PageHeader
+        title="ประวัติการปรับราคา"
+        description="300 รายการล่าสุด"
+        actions={
+          <Link href="/publications" className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+            <FileDown className="size-4" /> ดาวน์โหลดเมนูที่เคย Publish
+          </Link>
+        }
+      />
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500">
@@ -32,7 +41,7 @@ export default async function HistoryPage() {
                 <td className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-500">{fmtDate(r.changedAt)}</td>
                 <td className="px-3 py-2.5">
                   <Link href={`/products/${r.productId}`} className="font-medium text-slate-800 hover:text-brand-600">{r.title}</Link>
-                  <div className="text-xs text-slate-400">{r.mainName} › {r.subName}</div>
+                  <div className="text-xs text-slate-400">{r.mainName}{r.subName && ` › ${r.subName}`}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right text-slate-400 tabular-nums">{fmtPrice(r.oldPrice)}</td>
                 <td className="px-3 py-2.5 text-right font-semibold tabular-nums">

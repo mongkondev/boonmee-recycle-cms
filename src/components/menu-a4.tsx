@@ -3,6 +3,7 @@
 import { Clock, Globe, Phone } from "lucide-react";
 import { forwardRef } from "react";
 import { A4, type MenuPage, type MenuRow } from "@/lib/menu";
+import { fmtPriceNote } from "@/lib/trend";
 import type { ShopSettings } from "@/lib/types";
 import { RecycleMark } from "./recycle-mark";
 
@@ -144,7 +145,7 @@ function Row({ row, showUnit, showTrend, showImage }: { row: MenuRow; showUnit: 
       <span className="min-w-0 truncate font-medium">{p.title}</span>
       <span className="min-w-4 flex-1 translate-y-2 border-b-2 border-dotted border-[#3a9e1d]/35" />
       {showTrend && dir && <span className={`text-[13px] ${dir === "up" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>{dir === "up" ? "▲" : "▼"}</span>}
-      <span className="font-bold whitespace-nowrap text-[#e2572c] tabular-nums">{p.priceText}</span>
+      <span className="font-bold whitespace-nowrap text-[#e2572c] tabular-nums">{fmtPriceNote(p.priceText)}</span>
       {showUnit && p.unitName && <span className="text-[14px] whitespace-nowrap text-slate-500">/{p.unitName}</span>}
     </li>
   );

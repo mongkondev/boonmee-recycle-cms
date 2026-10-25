@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { Button, Card, FormError, Input, Label, Select, Toggle } from "@/components/ui";
+import { PriceInput } from "@/components/price-input";
 import { saveProduct, uploadImage } from "@/lib/actions";
+import { fmtPrice, fmtPriceNote } from "@/lib/trend";
 import type { CategoryTree, Unit } from "@/lib/types";
 
 export type ProductFormValue = {
@@ -67,10 +69,10 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(undefined);
-    const price = Number(v.price.replace(/,/g, ""));
+    const price = Number(v.price);
     if (!v.title.trim()) return setError("กรุณากรอกหัวข้อ");
     if (v.price.trim() === "" || !Number.isFinite(price)) return setError("กรุณากรอกราคาเป็นตัวเลข");
-    if (!v.subCategoryId) return setError("กรุณาเลือกหมวดหมู่ย่อย");
+    if (!v.mainCategoryId) return setError("กรุณาเลือกหมวดหมู่หลัก");
     startSave(async () => {
       const res = await saveProduct({
         id: v.id,
@@ -79,7 +81,8 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
         price,
         priceNote: v.priceNote,
         unitId: v.unitId ? Number(v.unitId) : null,
-        subCategoryId: Number(v.subCategoryId),
+        mainCategoryId: Number(v.mainCategoryId),
+        subCategoryId: v.subCategoryId ? Number(v.subCategoryId) : null,
         isActive: v.isActive,
         imageId: v.imageId,
       });
@@ -110,9 +113,15 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <Label htmlFor="price" required>ราคา (บาท)</Label>
-            <Input id="price" inputMode="decimal" value={v.price} onChange={(e) => set("price", e.target.value.replace(/[^\d.,]/g, ""))} className="text-right font-semibold tabular-nums" placeholder="0" />
-            {v.livePrice !== undefined && Number(v.price.replace(/,/g, "")) !== v.livePrice && (
-              <p className="mt-1 text-xs text-amber-600">ราคาประกาศปัจจุบัน {v.livePrice.toLocaleString("th-TH")} — ราคาใหม่จะเป็นร่างจนกว่าจะ Publish</p>
+            <PriceInput
+              id="price"
+              value={v.price}
+              onValueChange={(x) => set("price", x)}
+              placeholder="0"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-right text-sm font-semibold shadow-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
+            />
+            {v.livePrice !== undefined && Number(v.price) !== v.livePrice && (
+              <p className="mt-1 text-xs text-amber-600">ราคาประกาศปัจจุบัน {fmtPrice(v.livePrice)} — ราคาใหม่จะเป็นร่างจนกว่าจะ Publish</p>
             )}
           </div>
           <div>
@@ -124,7 +133,14 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
           </div>
           <div>
             <Label htmlFor="priceNote">ข้อความราคาบนเมนู</Label>
-            <Input id="priceNote" value={v.priceNote} onChange={(e) => set("priceNote", e.target.value)} placeholder="เช่น 3000-30000, 100+" />
+            <Input
+              id="priceNote"
+              inputMode="decimal"
+              value={v.priceNote}
+              onChange={(e) => set("priceNote", e.target.value.replace(/[^\d.+\-]/g, ""))}
+              placeholder="เช่น 3000-30000, 100+"
+            />
+            {v.priceNote && <p className="mt-1 text-xs text-slate-400">แสดงเป็น: {fmtPriceNote(v.priceNote)}</p>}
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -136,9 +152,9 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
             </Select>
           </div>
           <div>
-            <Label htmlFor="sub" required>หมวดหมู่ย่อย</Label>
-            <Select id="sub" value={v.subCategoryId} onChange={(e) => set("subCategoryId", e.target.value)} disabled={!v.mainCategoryId}>
-              <option value="">— เลือก —</option>
+            <Label htmlFor="sub">หมวดหมู่ย่อย</Label>
+            <Select id="sub" value={v.subCategoryId} onChange={(e) => set("subCategoryId", e.target.value)} disabled={!v.mainCategoryId || subs.length === 0}>
+              <option value="">— ไม่ระบุ (ไม่บังคับ) —</option>
               {subs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
           </div>

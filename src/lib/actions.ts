@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -155,7 +155,7 @@ export async function deleteMainCategory(id: number): Promise<ActionResult> {
   try {
     await db.delete(schema.mainCategories).where(eq(schema.mainCategories.id, id));
   } catch (e) {
-    if (isFkViolation(e)) return fail("ลบไม่ได้: ยังมีสินค้าอยู่ในหมวดย่อย กรุณาย้ายหรือลบสินค้าก่อน");
+    if (isFkViolation(e)) return fail("ลบไม่ได้: ยังมีสินค้าอยู่ในหมวดนี้ กรุณาย้ายหรือลบสินค้าก่อน");
     throw e;
   }
   revalidateAll();
@@ -253,7 +253,8 @@ const productSchema = z.object({
   price: z.number({ message: "กรุณากรอกราคา" }).finite().min(0, "ราคาต้องไม่ติดลบ").max(9_999_999_999),
   priceNote: z.string().trim().max(40).optional().transform((v) => v || null),
   unitId: z.number().int().nullable(),
-  subCategoryId: z.number({ message: "กรุณาเลือกหมวดหมู่ย่อย" }).int(),
+  mainCategoryId: z.number({ message: "กรุณาเลือกหมวดหมู่หลัก" }).int(),
+  subCategoryId: z.number().int().nullable(),
   isActive: z.boolean(),
   imageId: z.string().uuid().nullable(),
 });
@@ -266,6 +267,10 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult<{ i
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const { id, ...data } = parsed.data;
   data.price = Math.round(data.price * 100) / 100;
+  if (data.subCategoryId) {
+    const sub = await db.query.subCategories.findFirst({ where: eq(schema.subCategories.id, data.subCategoryId) });
+    if (sub?.mainCategoryId !== data.mainCategoryId) return fail("หมวดย่อยไม่อยู่ในหมวดหลักที่เลือก");
+  }
 
   const savedId = await db.transaction(async (tx) => {
     if (id) {
@@ -286,7 +291,12 @@ export async function saveProduct(input: ProductInput): Promise<ActionResult<{ i
     const [{ max }] = await tx
       .select({ max: sql<number>`coalesce(max(sort_order), -1)::int` })
       .from(schema.products)
-      .where(eq(schema.products.subCategoryId, data.subCategoryId));
+      .where(
+        and(
+          eq(schema.products.mainCategoryId, data.mainCategoryId),
+          data.subCategoryId ? eq(schema.products.subCategoryId, data.subCategoryId) : isNull(schema.products.subCategoryId),
+        ),
+      );
     const [row] = await tx.insert(schema.products).values({ ...data, sortOrder: max + 1 }).returning({ id: schema.products.id });
     await tx.insert(schema.priceHistory).values({ productId: row.id, oldPrice: null, newPrice: data.price, changedBy: user.id });
     return row.id;

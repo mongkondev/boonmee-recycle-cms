@@ -16,7 +16,7 @@ function group(products: ProductRow[]) {
     let m = mains.get(p.mainCategoryId);
     if (!m) mains.set(p.mainCategoryId, (m = { id: p.mainCategoryId, mainName: p.mainName, sections: [] }));
     let s = m.sections.find((x) => x.name === p.subName);
-    if (!s) m.sections.push((s = { name: p.subName, items: [] }));
+    if (!s) m.sections.push((s = { name: p.subName, items: [] } as PosterData["sections"][number]));
     s.items.push(p);
   }
   return [...mains.values()];

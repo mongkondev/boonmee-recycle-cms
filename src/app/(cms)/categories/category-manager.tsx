@@ -30,7 +30,16 @@ export function CategoryManager({ tree }: { tree: CategoryTree }) {
         </div>
         <EditList
           placeholder="ชื่อหมวดหมู่หลักใหม่"
-          items={tree.map((m) => ({ id: m.id, name: m.name, isActive: m.isActive, meta: `${m.subs.length} หมวดย่อย · ${m.subs.reduce((a, s) => a + s.productCount, 0)} สินค้า` }))}
+          items={tree.map((m) => ({ id: m.id, name: m.name, isActive: m.isActive, meta: `${m.subs.length} หมวดย่อย · ${m.directCount + m.subs.reduce((a, s) => a + s.productCount, 0)} สินค้า` }))}
+          extra={(item) => (
+            <Link
+              href={`/products/new?main=${item.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hidden items-center gap-1 rounded-md px-2 py-1 text-xs text-brand-600 hover:bg-brand-50 sm:inline-flex"
+            >
+              <Plus className="size-3" /> สินค้า
+            </Link>
+          )}
           selectedId={main?.id}
           onSelect={setSelected}
           onCreate={(name) => act(saveMainCategory({ name }))}
@@ -46,7 +55,7 @@ export function CategoryManager({ tree }: { tree: CategoryTree }) {
           <h2 className="font-semibold text-ink-900">
             หมวดหมู่ย่อย {main && <span className="font-normal text-brand-600">· {main.name}</span>}
           </h2>
-          <p className="text-xs text-slate-400">ลำดับที่นี่ = ลำดับกลุ่มบนเมนูราคา</p>
+          <p className="text-xs text-slate-400">ไม่บังคับ — สินค้าผูกกับหมวดหลักโดยตรงได้ · ลำดับที่นี่ = ลำดับกลุ่มบนเมนูราคา</p>
         </div>
         {main ? (
           <EditList

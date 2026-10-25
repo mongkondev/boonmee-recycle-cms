@@ -25,7 +25,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
     group: "ราคา",
     items: [
       { href: "/prices", label: "ปรับปรุงราคา", icon: TrendingUp },
-      { href: "/publications", label: "ประกาศราคา (A4)", icon: Megaphone },
+      { href: "/publications", label: "ประวัติ Publish (A4)", icon: Megaphone },
       { href: "/history", label: "ประวัติราคา", icon: History },
       { href: "/export", label: "เมนูราคา", icon: FileImage },
     ],
