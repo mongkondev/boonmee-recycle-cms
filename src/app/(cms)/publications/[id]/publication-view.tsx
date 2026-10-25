@@ -11,7 +11,7 @@ import { Button, Card, PageHeader } from "@/components/ui";
 import { savePublicationPage, trimPublicationPages } from "@/lib/actions";
 import { A4, paginate } from "@/lib/menu";
 import type { getPublication } from "@/lib/queries";
-import { dataUrlToFile, downloadUrl, imagesToA4Pdf, renderNode } from "@/lib/render-image";
+import { dataUrlToFile, downloadUrl, imagesToA4Pdf, renderNode, shareFilesNow } from "@/lib/render-image";
 import { fmtDate, fmtPrice } from "@/lib/trend";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 
@@ -84,12 +84,20 @@ export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
     }
   };
 
-  const share = () =>
-    run("share", async () => {
-      const files = await Promise.all(pageUrls.map(async (u, i) => dataUrlToFile(u, `${fileBase}-${i + 1}.jpg`)));
-      if (navigator.canShare?.({ files })) await navigator.share({ files, title: "เมนูราคารับซื้อ" });
-      else files.forEach((f) => downloadUrl(URL.createObjectURL(f), f.name));
-    });
+  // fetch the stored pages up front so the share tap can call navigator.share immediately (iOS rule)
+  const [shareFiles, setShareFiles] = useState<File[] | null>(null);
+  const pageKey = pub.pages.map((p) => p.imageId).join(",");
+  useEffect(() => {
+    if (!canShare || !pageKey) return;
+    let cancelled = false;
+    setShareFiles(null);
+    Promise.all(pageKey.split(",").map((id, i) => dataUrlToFile(`/api/images/${id}`, `${fileBase}-${i + 1}.jpg`)))
+      .then((files) => !cancelled && setShareFiles(files))
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [canShare, pageKey, fileBase]);
 
   return (
     <>
@@ -116,8 +124,14 @@ export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
               {busy === "pdf" ? <LoaderCircle className="size-4 animate-spin" /> : <FileDown className="size-4" />} ดาวน์โหลด PDF (A4 · {pages.length} หน้า)
             </Button>
             {canShare && (
-              <Button variant="secondary" className="w-full" disabled={!stored || !!busy} onClick={share}>
-                {busy === "share" ? <LoaderCircle className="size-4 animate-spin" /> : <Share2 className="size-4" />} แชร์รูป (LINE / Facebook)
+              <Button
+                variant="secondary"
+                className="w-full"
+                disabled={!stored || !shareFiles || !!busy}
+                onClick={() => shareFiles && shareFilesNow(shareFiles, "เมนูราคารับซื้อ")}
+              >
+                {stored && !shareFiles ? <LoaderCircle className="size-4 animate-spin" /> : <Share2 className="size-4" />}
+                {stored && !shareFiles ? "กำลังเตรียมไฟล์…" : "แชร์รูป (LINE / Facebook)"}
               </Button>
             )}
             <Button variant="ghost" className="w-full" disabled={!!busy || !qrReady} onClick={generate}>

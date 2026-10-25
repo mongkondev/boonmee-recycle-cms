@@ -10,13 +10,27 @@ export async function renderNode(node: HTMLElement, opts: { width: number; heigh
     cacheBust: true,
     style: { transform: "none" },
   };
-  return opts.type === "jpeg" ? toJpeg(node, { ...common, quality: 0.92, backgroundColor: "#ffffff" }) : toPng(node, common);
+  return opts.type === "jpeg" ? toJpeg(node, { ...common, quality: 0.85, backgroundColor: "#ffffff" }) : toPng(node, common);
 }
 
 export const dataUrlToFile = async (url: string, name: string) => {
   const blob = await (await fetch(url)).blob();
   return new File([blob], name, { type: blob.type });
 };
+
+/**
+ * iOS (Safari and Chrome, both WebKit) only allows navigator.share() right inside a tap, so callers
+ * must have the files ready beforehand and call this synchronously from the click handler.
+ */
+export function shareFilesNow(files: File[], title: string) {
+  if (navigator.canShare?.({ files })) {
+    navigator.share({ files, title }).catch((e: Error) => {
+      if (e.name !== "AbortError") files.forEach((f) => downloadUrl(URL.createObjectURL(f), f.name));
+    });
+  } else {
+    files.forEach((f) => downloadUrl(URL.createObjectURL(f), f.name));
+  }
+}
 
 export function downloadUrl(url: string, name: string) {
   const a = document.createElement("a");

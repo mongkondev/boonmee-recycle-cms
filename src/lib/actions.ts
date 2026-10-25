@@ -103,7 +103,7 @@ export async function savePublicationPage(publicationId: number, pageNo: number,
   await requireUser();
   const file = form.get("file");
   if (!(file instanceof File) || file.type !== "image/jpeg") return fail("ไฟล์ไม่ถูกต้อง");
-  if (file.size > 8 * 1024 * 1024) return fail("ไฟล์ใหญ่เกินไป");
+  if (file.size > 4 * 1024 * 1024) return fail("ไฟล์ใหญ่เกินไป");
   await db.transaction(async (tx) => {
     const old = await tx
       .select({ imageId: schema.publicationPages.imageId })

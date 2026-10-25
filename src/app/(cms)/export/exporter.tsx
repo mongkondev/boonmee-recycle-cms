@@ -5,6 +5,7 @@ import { FileDown, ImageDown, LoaderCircle, Share2 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, cn, Label, Toggle } from "@/components/ui";
+import { shareFilesNow } from "@/lib/render-image";
 import type { ProductRow, ShopSettings } from "@/lib/types";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 import { Poster, POSTER_H, POSTER_W, type PosterData, type PosterOptions } from "./poster";
@@ -82,17 +83,23 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
       pdf.save(`${fileBase}.pdf`);
     });
 
-  const share = () =>
-    run("share", async () => {
+  // iOS only lets navigator.share run directly inside a tap, so sharing is two taps:
+  // the first renders the images, the second (with files ready) opens the share sheet.
+  const shareKey = JSON.stringify([selected, options, qr]);
+  const [prepared, setPrepared] = useState<{ key: string; files: File[] } | null>(null);
+  const ready = prepared?.key === shareKey ? prepared.files : null;
+  const share = () => {
+    if (ready) return shareFilesNow(ready, settings.shop_name);
+    void run("share", async () => {
       const files = await Promise.all(
         chosen.map(async (p) => {
           const blob = await (await fetch(await render(p.id))).blob();
           return new File([blob], `${fileBase}-${slug(p.mainName)}.png`, { type: "image/png" });
         }),
       );
-      if (navigator.canShare?.({ files })) await navigator.share({ files, title: settings.shop_name });
-      else files.forEach((f) => download(URL.createObjectURL(f), f.name));
+      setPrepared({ key: shareKey, files });
     });
+  };
 
   const opt = <K extends keyof PosterOptions>(k: K, v: PosterOptions[K]) => setOptions((o) => ({ ...o, [k]: v }));
 
@@ -155,7 +162,7 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
           {canShare && (
             <Button variant="secondary" className="w-full" onClick={share} disabled={!chosen.length || !!busy}>
               {busy === "share" ? <LoaderCircle className="size-4 animate-spin" /> : <Share2 className="size-4" />}
-              แชร์รูป (LINE / Facebook)
+              {busy === "share" ? "กำลังเตรียมรูป…" : ready ? "พร้อมแล้ว — แตะเพื่อแชร์" : "แชร์รูป (LINE / Facebook)"}
             </Button>
           )}
           <p className="text-xs text-slate-400">เมนูราคาขนาด 1080×1920 px (สัดส่วนสตอรี่) ส่งในแชทหรือพิมพ์ติดหน้าร้านได้ · แก้ข้อมูลร้านได้ที่หน้า ตั้งค่า</p>
