@@ -12,7 +12,7 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/migrate.ts && tsx src/db/seed.ts --force",
     "db:studio": "drizzle-kit studio",
-    "vercel-build": "tsx src/db/migrate.ts && next build"
+    "vercel-build": "tsx src/db/migrate.ts && tsx src/db/seed.ts && next build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -45,7 +45,6 @@ login ครั้งถัดไปจะให้สแกน QR ใหม่
 
 1. สร้างฐานข้อมูลที่ [neon.tech](https://neon.tech) (free tier) แล้วคัดลอก connection string แบบ **pooled**
 2. Import repo นี้ใน Vercel แล้วตั้ง env `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
-3. Build command `npm run vercel-build` (รัน migration ก่อน build)
-4. Seed ครั้งแรกจากเครื่อง: `DATABASE_URL=<neon-url> npm run db:seed`
+3. Build command คือ `npm run vercel-build` (ตั้งไว้ใน `vercel.json` แล้ว) ซึ่งรัน migration และ seed ก่อน build โดย seed จะข้ามถ้ามีข้อมูลอยู่แล้ว
 
 รูปสินค้าเก็บในตาราง `images` (bytea) ย่อเป็น WebP ขนาดไม่เกิน 800px ฝั่ง browser ก่อนอัปโหลด จึงใช้กับ serverless ได้โดยไม่ต้องมี storage แยก
