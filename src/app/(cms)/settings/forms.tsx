@@ -12,7 +12,7 @@ const FIELDS: { key: keyof ShopSettings; label: string; hint?: string }[] = [
   { key: "phones", label: "เบอร์โทร", hint: "คั่นหลายเบอร์ด้วยจุลภาค (,)" },
   { key: "tagline", label: "ข้อความรับซื้อ (ใต้ชื่อร้าน)" },
   { key: "open_hours", label: "เวลาเปิดร้าน" },
-  { key: "line_url", label: "ลิงก์ LINE (ใช้สร้าง QR บนใบราคา)", hint: "เช่น https://line.me/R/ti/p/@xxxx" },
+  { key: "line_url", label: "ลิงก์ LINE (ใช้สร้าง QR บนเมนูราคา)", hint: "เช่น https://line.me/R/ti/p/@xxxx" },
   { key: "website", label: "เว็บไซต์" },
 ];
 
@@ -24,7 +24,7 @@ export function ShopForm({ initial }: { initial: ShopSettings }) {
   return (
     <Card className="p-6">
       <h2 className="mb-1 font-semibold text-ink-900">ข้อมูลร้าน</h2>
-      <p className="mb-5 text-sm text-slate-500">แสดงบนหัว/ท้ายใบราคาที่ส่งออก</p>
+      <p className="mb-5 text-sm text-slate-500">แสดงบนหัว/ท้ายเมนูราคา</p>
       <form
         className="space-y-4"
         onSubmit={(e) => {

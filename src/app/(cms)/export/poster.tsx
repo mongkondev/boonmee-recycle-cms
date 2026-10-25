@@ -15,6 +15,8 @@ export type PosterOptions = {
   showUnit: boolean;
   showTrend: boolean;
   showDate: boolean;
+  showSubName: boolean;
+  showImage: boolean;
 };
 
 export type PosterData = {
@@ -34,7 +36,7 @@ const RecycleMark = ({ size, className, style }: { size: number; className?: str
 );
 
 /**
- * 1080×1920 story-format price board. Rendered at native size; the preview scales a wrapper,
+ * 1080×1920 story-format price menu (like a food-stall menu board). Rendered at native size; the preview scales a wrapper,
  * so html-to-image always captures full resolution.
  */
 export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: ShopSettings; qr: string | null; options: PosterOptions }>(
@@ -98,39 +100,52 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
           </div>
         </header>
 
-        {/* title */}
-        <div className="relative mx-14 mt-10 flex items-end justify-between gap-6">
-          <div>
-            <div className="text-[28px] font-medium text-[#3a9e1d]">ราคารับซื้อ</div>
-            <h2 className="text-[64px] leading-none font-bold text-[#003020]">{data.mainName}</h2>
+        {/* main category = the big green menu pill */}
+        <div className="relative mx-14 mt-10 flex flex-col items-center">
+          <div className="relative flex items-center gap-5 rounded-full bg-gradient-to-r from-[#3a9e1d] via-[#4fae2f] to-[#64b947] px-20 py-4 text-white shadow-[0_14px_30px_-12px_rgba(58,158,29,0.7)]">
+            <RecycleMark size={54} className="text-white/85" />
+            <h2 className="text-[64px] leading-tight font-bold">{data.mainName}</h2>
+            <RecycleMark size={54} className="text-white/85" />
           </div>
           {options.showDate && (
-            <div className="rounded-2xl bg-white px-6 py-3 text-right shadow-sm ring-1 ring-[#3a9e1d]/20">
-              <div className="text-[20px] text-slate-500">อัปเดตราคา</div>
-              <div className="text-[28px] font-semibold text-[#003020]">{today}</div>
+            <div className="mt-4 rounded-full bg-white px-6 py-1.5 text-[22px] text-slate-500 shadow-sm ring-1 ring-[#3a9e1d]/15">
+              ราคา ณ วันที่ <span className="font-semibold text-[#003020]">{today}</span>
             </div>
           )}
         </div>
 
-        {/* price list */}
+        {/* menu items, grouped by sub category */}
         <div ref={bodyRef} className="relative mx-10 mt-8 flex min-h-0 flex-1 flex-col justify-center-safe overflow-hidden">
           <div
             style={{ fontSize: 34 * scale, columnCount: twoCol ? 2 : 1, columnGap: 28 }}
             className="h-fit"
           >
             {data.sections.map((sec) => (
-              <section key={sec.name} className="mb-[0.7em] break-inside-avoid-column rounded-[32px] bg-white/90 p-[0.55em] shadow-[0_8px_30px_-12px_rgba(0,48,32,0.18)] ring-1 ring-[#3a9e1d]/10">
-                <div className="mb-[0.25em] flex items-center gap-3 rounded-[24px] bg-gradient-to-r from-[#3a9e1d] to-[#64b947] px-[0.6em] py-[0.25em] text-white">
-                  <RecycleMark size={34 * scale} className="shrink-0 text-white/90" />
-                  <span className="text-[1.05em] font-bold">{sec.name}</span>
-                </div>
+              <section key={sec.name} className="mb-[0.7em] break-inside-avoid-column rounded-[32px] bg-white/90 px-[0.55em] py-[0.45em] shadow-[0_8px_30px_-12px_rgba(0,48,32,0.18)] ring-1 ring-[#3a9e1d]/10">
+                {options.showSubName && (
+                  <div className="mb-[0.2em] flex items-center gap-[0.35em] px-[0.4em] text-[0.62em] font-semibold text-[#2f8217]">
+                    <span className="size-[0.45em] rounded-full bg-[#3a9e1d]" />
+                    {sec.name}
+                    <span className="h-px flex-1 bg-[#3a9e1d]/25" />
+                  </div>
+                )}
                 <ul>
                   {sec.items.map((p, i) => {
                     const t = trendOf(p.price, p.prevPrice);
                     return (
-                      <li key={p.id} className={`flex items-baseline gap-[0.3em] rounded-xl px-[0.4em] py-[0.12em] ${i % 2 ? "bg-[#f0f9ec]/70" : ""}`}>
+                      <li key={p.id} className={`flex items-center gap-[0.3em] rounded-xl px-[0.4em] py-[0.12em] ${i % 2 ? "bg-[#f0f9ec]/70" : ""}`}>
+                        {options.showImage && (
+                          p.imageId ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={`/api/images/${p.imageId}`} alt="" className="size-[1.5em] shrink-0 rounded-full object-cover ring-2 ring-white" />
+                          ) : (
+                            <span className="grid size-[1.5em] shrink-0 place-items-center rounded-full bg-[#f0f9ec] text-[#3a9e1d]">
+                              <RecycleMark size={20 * scale} />
+                            </span>
+                          )
+                        )}
                         <span className="font-medium whitespace-nowrap">{p.title}</span>
-                        <span className="mx-[0.1em] min-w-[0.8em] flex-1 translate-y-[-0.2em] border-b-[3px] border-dotted border-[#3a9e1d]/35" />
+                        <span className="mx-[0.1em] min-w-[0.8em] flex-1 translate-y-[0.25em] border-b-[3px] border-dotted border-[#3a9e1d]/35" />
                         {options.showTrend && (t.dir === "up" || t.dir === "down") && (
                           <span className={`text-[0.55em] ${t.dir === "up" ? "text-[#16a34a]" : "text-[#dc2626]"}`}>{t.dir === "up" ? "▲" : "▼"}</span>
                         )}

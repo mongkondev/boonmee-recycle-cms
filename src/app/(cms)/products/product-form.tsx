@@ -118,7 +118,7 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
             </Select>
           </div>
           <div>
-            <Label htmlFor="priceNote">ข้อความราคาบนใบราคา</Label>
+            <Label htmlFor="priceNote">ข้อความราคาบนเมนู</Label>
             <Input id="priceNote" value={v.priceNote} onChange={(e) => set("priceNote", e.target.value)} placeholder="เช่น 3000-30000, 100+" />
           </div>
         </div>
@@ -176,7 +176,7 @@ export function ProductForm({ initial, tree, units }: { initial: ProductFormValu
         <Card className="flex items-center justify-between p-5">
           <div>
             <div className="text-sm font-medium text-slate-700">สถานะรับซื้อ</div>
-            <div className="text-xs text-slate-400">{v.isActive ? "แสดงบนใบราคา" : "ซ่อนจากใบราคา"}</div>
+            <div className="text-xs text-slate-400">{v.isActive ? "แสดงบนเมนูราคา" : "ซ่อนจากเมนูราคา"}</div>
           </div>
           <Toggle checked={v.isActive} onChange={(x) => set("isActive", x)} label="สถานะรับซื้อ" />
         </Card>

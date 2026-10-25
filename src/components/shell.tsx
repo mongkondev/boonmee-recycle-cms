@@ -24,7 +24,7 @@ const NAV = [
     items: [
       { href: "/prices", label: "ปรับปรุงราคา", icon: TrendingUp },
       { href: "/history", label: "ประวัติราคา", icon: History },
-      { href: "/export", label: "ส่งออกใบราคา", icon: FileImage },
+      { href: "/export", label: "เมนูราคา", icon: FileImage },
     ],
   },
   {

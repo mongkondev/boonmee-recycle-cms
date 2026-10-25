@@ -10,10 +10,10 @@ type Item = [title: string, price: number, unit?: string, note?: string, history
 // so the trend arrows have something to show right after seeding.
 const CATALOG: { main: string; subs: { name: string; items: Item[] }[] }[] = [
   {
-    main: "บอร์ด & อิเล็กทรอนิกส์",
+    main: "บอร์ด",
     subs: [
       {
-        name: "บอร์ด",
+        name: "บอร์ดอิเล็กทรอนิกส์",
         items: [
           ["บอร์ด-2ชิป+การ์ดจอ", 570, "กก.", undefined, [550, 560]],
           ["บอร์ด-1 ชิป", 350, "กก.", undefined, [370]],

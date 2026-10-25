@@ -27,7 +27,7 @@ const slug = (s: string) => s.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g,
 export function Exporter({ products, settings }: { products: ProductRow[]; settings: ShopSettings }) {
   const posters = useMemo(() => group(products), [products]);
   const [selected, setSelected] = useState<number[]>(posters.map((p) => p.id));
-  const [options, setOptions] = useState<PosterOptions>({ columns: "auto", showUnit: true, showTrend: false, showDate: true });
+  const [options, setOptions] = useState<PosterOptions>({ columns: "auto", showUnit: true, showTrend: false, showDate: true, showSubName: true, showImage: false });
   const [qr, setQr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const refs = useRef(new Map<number, HTMLDivElement>());
@@ -40,7 +40,7 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
   }, [settings.line_url]);
 
   const chosen = posters.filter((p) => selected.includes(p.id));
-  const fileBase = `ราคารับซื้อ-${new Date().toISOString().slice(0, 10)}`;
+  const fileBase = `เมนูราคา-${new Date().toISOString().slice(0, 10)}`;
 
   const render = async (id: number) => {
     const node = refs.current.get(id)!;
@@ -99,7 +99,7 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
     <div className="grid gap-6 xl:grid-cols-[300px_1fr]">
       <Card className="h-fit space-y-5 p-5 xl:sticky xl:top-22">
         <div>
-          <Label>หมวดหมู่ที่จะส่งออก</Label>
+          <Label>หมวดหลัก (1 หมวด = 1 หน้าเมนู)</Label>
           <div className="space-y-1.5">
             {posters.map((p) => (
               <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50">
@@ -135,7 +135,9 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
             [
               ["showUnit", "แสดงหน่วย (/กก.)"],
               ["showTrend", "แสดงลูกศร ▲▼ ราคาขึ้น/ลง"],
-              ["showDate", "แสดงวันที่อัปเดต"],
+              ["showSubName", "แสดงชื่อหมวดย่อย"],
+              ["showImage", "แสดงรูปสินค้า (แบบเมนูอาหาร)"],
+              ["showDate", "แสดงวันที่ของราคา"],
             ] as const
           ).map(([k, label]) => (
             <label key={k} className="flex items-center justify-between gap-2">
@@ -155,7 +157,7 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
               แชร์รูป (LINE / Facebook)
             </Button>
           )}
-          <p className="text-xs text-slate-400">ขนาด 1080×1920 px (สัดส่วนสตอรี่) เหมาะกับการส่งในแชท · แก้ข้อมูลร้านได้ที่หน้า ตั้งค่า</p>
+          <p className="text-xs text-slate-400">เมนูราคาขนาด 1080×1920 px (สัดส่วนสตอรี่) ส่งในแชทหรือพิมพ์ติดหน้าร้านได้ · แก้ข้อมูลร้านได้ที่หน้า ตั้งค่า</p>
         </div>
       </Card>
 

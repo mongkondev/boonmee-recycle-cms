@@ -46,7 +46,7 @@ export function CategoryManager({ tree }: { tree: CategoryTree }) {
           <h2 className="font-semibold text-ink-900">
             หมวดหมู่ย่อย {main && <span className="font-normal text-brand-600">· {main.name}</span>}
           </h2>
-          <p className="text-xs text-slate-400">ลำดับที่นี่ = ลำดับหัวข้อบนใบราคา</p>
+          <p className="text-xs text-slate-400">ลำดับที่นี่ = ลำดับกลุ่มบนเมนูราคา</p>
         </div>
         {main ? (
           <EditList

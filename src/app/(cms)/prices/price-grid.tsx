@@ -262,7 +262,7 @@ export function PriceGrid({ initial }: { initial: ProductRow[] }) {
                         <span className="hidden sm:block"><Thumb imageId={r.imageId} alt={r.title} size={32} /></span>
                         <div className="min-w-0">
                           <div className="font-medium text-slate-800 md:truncate">{r.title}</div>
-                          {r.priceNote && <div className="text-xs text-slate-400">แสดงบนใบราคา: {r.priceNote}</div>}
+                          {r.priceNote && <div className="text-xs text-slate-400">แสดงบนเมนูราคา: {r.priceNote}</div>}
                         </div>
                       </div>
                     </td>
