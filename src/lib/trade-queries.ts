@@ -176,6 +176,28 @@ export async function getSourceOptions(excludeSaleId = 0, tx: Pick<typeof db, "e
   });
 }
 
+/** Stock added by hand (รับเข้าสต็อก) with what is left of it, not counting the sale being edited. Oldest first. */
+export type StockSource = { id: number; productId: number | null; title: string; unitName: string | null; qty: number; qtyLeft: number; note: string | null; createdAt: string };
+
+export async function getStockSources(excludeSaleId = 0, tx: Pick<typeof db, "execute"> = db): Promise<StockSource[]> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
+    select st.id, st.product_id, st.title, st.unit_name, st.qty, st.note, st.created_at,
+           coalesce((select sum(a.qty) from sale_allocations a join sale_items si on si.id = a.sale_item_id
+                     where a.stock_in_id = st.id and si.sale_id <> ${excludeSaleId}), 0) as sold_qty
+    from stock_ins st order by st.created_at, st.id
+  `);
+  return rows.map((r) => ({
+    id: r.id as number,
+    productId: r.product_id as number | null,
+    title: r.title as string,
+    unitName: r.unit_name as string | null,
+    qty: Number(r.qty),
+    qtyLeft: round3(Number(r.qty) - Number(r.sold_qty)),
+    note: r.note as string | null,
+    createdAt: new Date(r.created_at as string).toISOString(),
+  }));
+}
+
 /** Catalogue items that can be sold, priced at the last selling price of each. */
 export async function getSellProducts() {
   const [products, last] = await Promise.all([
@@ -265,7 +287,7 @@ export async function getTotals(r: DayRange) {
       (select coalesce(sum(
          coalesce((select sum(a.amount) from sale_allocations a join bill_items i on i.id = a.bill_item_id where i.bill_id = b.id), 0) - b.total
        ), 0) from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_profit,
-      (select coalesce(sum(si.amount - coalesce((select sum(a.amount) from sale_allocations a where a.sale_item_id = si.id), 0)), 0)
+      (select coalesce(sum(si.amount - coalesce((select sum(a.amount) from sale_allocations a where a.sale_item_id = si.id and a.bill_item_id is not null), 0)), 0)
          from sale_items si join sales s on s.id = si.sale_id where ${inRange(sql`s.sale_date`, r)}) as unlinked_amount
   `);
   return {
@@ -357,4 +379,19 @@ export async function getCustomerStats(search = "") {
     sellAmount: Number(r.sell_amount),
     lastUsed: r.last_used ? new Date(r.last_used as string).toISOString() : null,
   }));
+}
+
+/** What is on hand per item: open lots (same item, same unit) plus stock added by hand. */
+export async function getStockSummary() {
+  const [sources, stock] = await Promise.all([getSourceOptions(), getStockSources()]);
+  const m = new Map<string, { key: string; productId: number | null; title: string; unitName: string | null; fromLots: number; added: number }>();
+  const add = (s: { productId: number | null; title: string; unitName: string | null; qtyLeft: number }, field: "fromLots" | "added") => {
+    const key = `${s.productId ? `p${s.productId}` : `t${s.title.toLowerCase().replace(/\s+/g, "")}`}|${s.unitName ?? ""}`;
+    const row = m.get(key) ?? { key, productId: s.productId, title: s.title, unitName: s.unitName, fromLots: 0, added: 0 };
+    row[field] = round3(row[field] + s.qtyLeft);
+    m.set(key, row);
+  };
+  sources.forEach((s) => add(s, "fromLots"));
+  stock.forEach((s) => add(s, "added"));
+  return { sources, stock, items: [...m.values()].map((r) => ({ ...r, total: round3(Math.max(0, r.fromLots) + r.added) })) };
 }

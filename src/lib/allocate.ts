@@ -1,4 +1,4 @@
-import type { SourceOption } from "./trade-queries";
+import type { SourceOption, StockSource } from "./trade-queries";
 
 /**
  * Which purchase lines (lots) a sale is deducted from. Shared by the sale form (live preview) and saveSale,
@@ -132,17 +132,20 @@ export function allocate(lines: AllocLine[], sources: AllocSource[]): Alloc[][] 
   });
 }
 
-/** Source options (newest first) in the shape the allocator takes, oldest first. */
-export function toAllocSources(sources: SourceOption[]): AllocSource[] {
+/** Allocation ids of stock added by hand are negative, so they never clash with purchase line ids. */
+export const stockAllocId = (stockInId: number) => -stockInId;
+
+/**
+ * Source options (newest first) in the shape the allocator takes, oldest first: lots, then stock added by hand
+ * (no lot and no cost, so bought stock recovers its cost first).
+ */
+export function toAllocSources(sources: SourceOption[], stock: StockSource[] = []): AllocSource[] {
   // oldest lot first, each lot's lines in bill order
   const rank = new Map<number, number>();
   for (const s of sources) if (!rank.has(s.lotId)) rank.set(s.lotId, rank.size);
   return sources
     .map((s, i) => ({ s, i }))
     .sort((a, b) => rank.get(b.s.lotId)! - rank.get(a.s.lotId)! || a.i - b.i)
-    .map(({ s }) => ({
-      ...s,
-      costLeft: round(s.cost - s.sold, 2),
-      open: true,
-    }));
+    .map(({ s }): AllocSource => ({ ...s, costLeft: round(s.cost - s.sold, 2), open: true }))
+    .concat(stock.map((s) => ({ ...s, id: stockAllocId(s.id), lotId: 0, costLeft: 0, open: true })));
 }

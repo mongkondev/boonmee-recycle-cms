@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   customType,
   jsonb,
   index,
@@ -11,6 +12,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const bytea = customType<{ data: Buffer }>({
   dataType: () => "bytea",
@@ -266,14 +268,38 @@ export const saleAllocations = pgTable(
     saleItemId: integer("sale_item_id")
       .notNull()
       .references(() => saleItems.id, { onDelete: "cascade" }),
-    billItemId: integer("bill_item_id")
-      .notNull()
-      .references(() => billItems.id, { onDelete: "restrict" }),
+    // deducted from a purchase line (a lot) or from stock added by hand (no lot, no cost)
+    billItemId: integer("bill_item_id").references(() => billItems.id, { onDelete: "restrict" }),
+    stockInId: integer("stock_in_id").references(() => stockIns.id, { onDelete: "restrict" }),
     // counted against the purchase line's quantity only when the same item in the same unit was sold
     qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }),
     amount: money("amount").notNull(),
   },
-  (t) => [index("sale_allocations_item_idx").on(t.saleItemId), index("sale_allocations_bill_item_idx").on(t.billItemId)],
+  (t) => [
+    index("sale_allocations_item_idx").on(t.saleItemId),
+    index("sale_allocations_bill_item_idx").on(t.billItemId),
+    index("sale_allocations_stock_in_idx").on(t.stockInId),
+    check("sale_allocations_one_source", sql`(${t.billItemId} is null) <> (${t.stockInId} is null)`),
+  ],
+);
+
+/**
+ * รับเข้าสต็อก: stock added by hand without a purchase, e.g. copper taken out of a TV that was bought.
+ * It has no cost (that stays with the lot it came from), so what it sells for counts toward total profit.
+ */
+export const stockIns = pgTable(
+  "stock_ins",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    unitName: text("unit_name"),
+    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }).notNull(),
+    note: text("note"),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("stock_ins_product_idx").on(t.productId)],
 );
 
 /** Payment slips (or other reference photos) attached to a purchase or a sale. */

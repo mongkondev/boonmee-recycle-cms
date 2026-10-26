@@ -3,7 +3,7 @@ import { TradeForm } from "@/components/trade-form";
 import { bangkokDay, fmtSaleNo } from "@/lib/bill";
 import { toParty } from "@/lib/party";
 import { getSettings, getUnits } from "@/lib/queries";
-import { getAttachments, getCustomers, getSale, getSellProducts, getSourceOptions } from "@/lib/trade-queries";
+import { getAttachments, getCustomers, getSale, getSellProducts, getSourceOptions, getStockSources } from "@/lib/trade-queries";
 
 export const metadata = { title: "แก้ไขใบขาย" };
 
@@ -11,9 +11,10 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
   const id = Number((await params).id);
   const sale = Number.isInteger(id) ? await getSale(id) : null;
   if (!sale) notFound();
-  const [products, sources, customers, units, settings, slips] = await Promise.all([
+  const [products, sources, stock, customers, units, settings, slips] = await Promise.all([
     getSellProducts(),
     getSourceOptions(id),
+    getStockSources(id),
     getCustomers(),
     getUnits(),
     getSettings(),
@@ -27,6 +28,7 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
         mode="sell"
         products={products}
         sources={sources}
+        stock={stock}
         customers={customers}
         units={units.map((u) => u.name)}
         settings={settings}

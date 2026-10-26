@@ -2,14 +2,15 @@ import { TradeForm } from "@/components/trade-form";
 import { bangkokToday } from "@/lib/bill";
 import { emptyParty } from "@/lib/party";
 import { getSettings, getUnits } from "@/lib/queries";
-import { getCustomers, getSellProducts, getSourceOptions } from "@/lib/trade-queries";
+import { getCustomers, getSellProducts, getSourceOptions, getStockSources } from "@/lib/trade-queries";
 
 export const metadata = { title: "ขายออก" };
 
 export default async function NewSalePage({ searchParams }: { searchParams: Promise<{ lot?: string }> }) {
-  const [products, sources, customers, units, settings, sp] = await Promise.all([
+  const [products, sources, stock, customers, units, settings, sp] = await Promise.all([
     getSellProducts(),
     getSourceOptions(),
+    getStockSources(),
     getCustomers(),
     getUnits(),
     getSettings(),
@@ -25,6 +26,7 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
         mode="sell"
         products={products}
         sources={sources}
+        stock={stock}
         customers={customers}
         units={units.map((u) => u.name)}
         settings={settings}

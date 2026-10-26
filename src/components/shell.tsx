@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  PackagePlus,
   FileImage,
   FolderTree,
   History,
@@ -38,6 +39,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
       { href: "/bills", label: "รับซื้อเข้า / บิลเงินสด", icon: ReceiptText },
       { href: "/sales", label: "ขายออก / ใบขาย", icon: HandCoins },
       { href: "/lots", label: "LOT คงเหลือ", icon: Boxes },
+      { href: "/stock", label: "สต็อก / เติมของ", icon: PackagePlus },
       { href: "/reports", label: "รายงาน", icon: ChartColumn },
     ],
   },

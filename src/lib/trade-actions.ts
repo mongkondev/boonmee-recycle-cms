@@ -10,7 +10,7 @@ import { allocate, toAllocSources } from "./allocate";
 import { BILL_MAX_ROWS, bangkokDay } from "./bill";
 import { slipIdsSchema, syncAttachments } from "./attachments";
 import { partySchema, upsertCustomer } from "./customers";
-import { getSourceOptions } from "./trade-queries";
+import { getSourceOptions, getStockSources } from "./trade-queries";
 
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
@@ -81,7 +81,7 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
   const total = round(lines.reduce((s, l) => s + l.amount, 0), 2);
   const savedId = await db.transaction(async (tx) => {
     // read before this sale's old lines go: an edited sale may keep using lots closed since
-    const sources = toAllocSources(await getSourceOptions(id ?? 0, tx));
+    const sources = toAllocSources(await getSourceOptions(id ?? 0, tx), await getStockSources(id ?? 0, tx));
     const customerId = await upsertCustomer(tx, party);
     const values = { ...head, buyerName: party.name, customerId, total };
     let saleId = id;
@@ -109,7 +109,15 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
       lines.map((l) => ({ ...l, auto: l.autoLot })),
       sources,
     );
-    const allocs = plan.flatMap((parts, i) => parts.map((p) => ({ saleItemId: inserted[i].id, billItemId: p.sourceId, qty: p.qty, amount: p.amount })));
+    const allocs = plan.flatMap((parts, i) =>
+      parts.map((p) => ({
+        saleItemId: inserted[i].id,
+        // negative ids are stock added by hand
+        ...(p.sourceId < 0 ? { stockInId: -p.sourceId } : { billItemId: p.sourceId }),
+        qty: p.qty,
+        amount: p.amount,
+      })),
+    );
     if (allocs.length) await tx.insert(schema.saleAllocations).values(allocs);
     if (closeLotIds.length) {
       await tx
@@ -181,5 +189,38 @@ export async function deleteCustomer(id: number): Promise<ActionResult> {
   await requireUser();
   await db.delete(schema.customers).where(eq(schema.customers.id, id));
   revalidatePath("/customers");
+  return { ok: true };
+}
+
+/* ---------------- stock added by hand ---------------- */
+
+const stockInSchema = z.object({
+  productId: z.number().int().nullable(),
+  title: z.string().trim().min(1, "กรุณาเลือกสินค้า").max(200),
+  unitName: z.string().trim().max(40).nullable(),
+  qty: z.number({ message: "กรุณากรอกจำนวนที่ได้เพิ่ม" }).finite().positive("จำนวนต้องมากกว่า 0").max(99_999_999),
+  note: z.string().trim().max(300).optional().transform((v) => v || null),
+});
+
+/** รับเข้าสต็อก: e.g. copper taken out of a TV. Sold and counted with the same item bought in lots. */
+export async function addStockIn(input: z.input<typeof stockInSchema>): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = stockInSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { unitName, qty, ...rest } = parsed.data;
+  await db.insert(schema.stockIns).values({ ...rest, unitName: unitName || null, qty: round(qty, 3), createdBy: user.id });
+  revalidatePath("/stock");
+  revalidatePath("/sales");
+  return { ok: true };
+}
+
+export async function deleteStockIn(id: number): Promise<ActionResult> {
+  await requireUser();
+  try {
+    await db.delete(schema.stockIns).where(eq(schema.stockIns.id, id));
+  } catch {
+    return { ok: false, error: "ลบไม่ได้: มีการขายที่หักจากสต็อกนี้แล้ว" };
+  }
+  revalidatePath("/stock");
   return { ok: true };
 }

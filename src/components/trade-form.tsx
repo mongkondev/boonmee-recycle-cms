@@ -9,7 +9,7 @@ import { saveBill } from "@/lib/bill-actions";
 import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtBillNo, fmtMoney, fmtQty, fmtSaleNo } from "@/lib/bill";
 import { allocate, sameItem, toAllocSources } from "@/lib/allocate";
 import { saveSale } from "@/lib/trade-actions";
-import type { Customer, SourceOption } from "@/lib/trade-queries";
+import type { Customer, SourceOption, StockSource } from "@/lib/trade-queries";
 import { fmtPrice } from "@/lib/trend";
 import type { ShopSettings } from "@/lib/types";
 import { DocPreview } from "./doc-preview";
@@ -105,6 +105,7 @@ export function TradeForm({
   mode,
   products,
   sources = [],
+  stock = [],
   customers,
   units,
   settings,
@@ -121,6 +122,8 @@ export function TradeForm({
   /** for the A5 preview */
   settings: ShopSettings;
   sources?: SourceOption[];
+  /** selling: stock added by hand (รับเข้าสต็อก), counted with the same items in lots */
+  stock?: StockSource[];
   customers: Customer[];
   initial: TradeFormValues;
 }) {
@@ -223,7 +226,7 @@ export function TradeForm({
   const filledCount = rows.filter((r) => r.title.trim()).length;
   // selling: money put against each purchase line by this form
   // what saving would deduct from which purchase line (same rules as the server)
-  const allocSources = useMemo(() => toAllocSources(sources), [sources]);
+  const allocSources = useMemo(() => toAllocSources(sources, stock), [sources, stock]);
   const plan = selling
     ? allocate(
         rows.map((r) => ({
@@ -514,6 +517,19 @@ export function TradeForm({
               ) : null
             ) : (
               parts.map((p, k) => {
+                if (p.sourceId < 0) {
+                  const st = allocSources.find((x) => x.id === p.sourceId)!;
+                  const qtyAfter = Math.round((st.qtyLeft - (qtyBySource.get(st.id) ?? 0)) * 1000) / 1000;
+                  return (
+                    <span key={p.sourceId} className="block sm:inline">
+                      {k > 0 && <span className="hidden sm:inline"> · </span>}
+                      <span className="font-medium text-slate-600">สต็อกที่เติม </span>
+                      <span className="tabular-nums">
+                        {fmtQty(p.qty ?? 0)} {st.unitName} ({qtyAfter < 0 ? `เกินที่มี ${fmtQty(-qtyAfter)}` : `เหลือ ${fmtQty(qtyAfter)}`})
+                      </span>
+                    </span>
+                  );
+                }
                 const s = sourceById.get(p.sourceId)!;
                 const costAfter = Math.round((s.remaining - (usedBySource.get(s.id) ?? 0)) * 100) / 100;
                 const qtyAfter = Math.round((s.qtyLeft - (qtyBySource.get(s.id) ?? 0)) * 1000) / 1000;
