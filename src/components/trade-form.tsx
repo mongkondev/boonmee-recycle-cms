@@ -1,15 +1,17 @@
 "use client";
 
-import { Banknote, FileCheck2, Landmark, LoaderCircle, Package, Plus, Save, Search, Trash2, UserRound } from "lucide-react";
+import { Banknote, Eye, FileCheck2, Landmark, LoaderCircle, Package, Plus, Save, Search, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
 import { PriceInput } from "@/components/price-input";
 import { Button, Card, cn, FormError, Input, Label } from "@/components/ui";
 import { saveBill } from "@/lib/bill-actions";
-import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtMoney, fmtQty } from "@/lib/bill";
+import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtBillNo, fmtMoney, fmtQty, fmtSaleNo } from "@/lib/bill";
 import { saveSale } from "@/lib/trade-actions";
 import type { Customer, SourceOption } from "@/lib/trade-queries";
 import { fmtPrice } from "@/lib/trend";
+import type { ShopSettings } from "@/lib/types";
+import { DocPreview } from "./doc-preview";
 
 /** A catalogue item that can be put on a line. */
 export type TradeOption = {
@@ -28,6 +30,8 @@ type Row = {
   itemId?: number;
   /** selling: the purchase line (lot) this sale is deducted from */
   sourceItemId: number | null;
+  /** selling: explicitly sold from the mixed pile, not from a lot */
+  noLot?: boolean;
   productId: number | null;
   title: string;
   unitName: string;
@@ -45,6 +49,7 @@ export type TradeFormValues = {
   note: string;
   /** buying only: the purchase already has a bill number */
   hasBillNo?: boolean;
+  billNo?: number | null;
   /** buying only: lot number of an existing purchase, and the internal lot note */
   lotNo?: string;
   lotNote?: string;
@@ -80,12 +85,15 @@ export function TradeForm({
   sources = [],
   customers,
   units,
+  settings,
   initial,
 }: {
   mode: "buy" | "sell";
   products: TradeOption[];
   /** unit names offered in the unit dropdown */
   units: string[];
+  /** for the A5 preview */
+  settings: ShopSettings;
   sources?: SourceOption[];
   customers: Customer[];
   initial: TradeFormValues;
@@ -107,9 +115,13 @@ export function TradeForm({
     return [...filled, ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow())];
   });
   // selling: new lines default to the lot line picked last
-  const [lastSource, setLastSource] = useState<number | null>(initial.rows.at(-1)?.sourceItemId ?? null);
+  const [lastSource, setLastSource] = useState<{ id: number | null; noLot: boolean } | null>(() => {
+    const r = initial.rows.at(-1);
+    return r ? { id: r.sourceItemId, noLot: !!r.noLot } : null;
+  });
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const reg = (key: number, field: string) => (el: HTMLInputElement | null) => {
     if (el) inputs.current.set(`${key}:${field}`, el);
@@ -119,13 +131,15 @@ export function TradeForm({
 
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
   const sourceOptions = useMemo(
-    () =>
-      sources.map((s) => ({
+    () => [
+      { key: "none", title: "ไม่ระบุ LOT", group: "ขายจากกองรวม ไม่หักทุนของ LOT ใด", source: null },
+      ...sources.map((s) => ({
         key: String(s.id),
         title: `${s.title}${s.qty ? ` ${fmtQty(s.qty)} ${s.unitName ?? ""}` : ""}`,
         group: [s.lotNo, s.lotNote, s.customerName].filter(Boolean).join(" · "),
-        source: s,
+        source: s as SourceOption | null,
       })),
+    ],
     [sources],
   );
   const customerOptions = useMemo(
@@ -149,7 +163,7 @@ export function TradeForm({
 
   const addRow = () => {
     if (rows.length >= BILL_MAX_ROWS) return;
-    const r = blankRow(selling ? lastSource : null);
+    const r = { ...blankRow(selling ? (lastSource?.id ?? null) : null), noLot: selling && !!lastSource?.noLot };
     setRows((rs) => [...rs, r]);
     focus(r.key, "title");
   };
@@ -167,15 +181,15 @@ export function TradeForm({
       title: o.title,
       unitName: o.unitName ?? "",
       unitPrice: o.price === null ? row.unitPrice : String(o.price),
-      ...(selling && !row.sourceItemId && lastSource && { sourceItemId: lastSource }),
+      ...(selling && !row.sourceItemId && !row.noLot && lastSource && { sourceItemId: lastSource.id, noLot: lastSource.noLot }),
     });
     focus(row.key, "qty");
   };
 
-  const pickSource = (row: Row, s: SourceOption) => {
-    setLastSource(s.id);
+  const pickSource = (row: Row, s: SourceOption | null) => {
+    setLastSource({ id: s?.id ?? null, noLot: !s });
     // selling the purchased item as it is: start from the same item, it can be changed to the part sold
-    patch(row.key, { sourceItemId: s.id, ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) });
+    patch(row.key, s ? { sourceItemId: s.id, noLot: false, ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) } : { sourceItemId: null, noLot: true });
     focus(row.key, "title");
   };
 
@@ -190,7 +204,7 @@ export function TradeForm({
     const used = rows.filter((r) => r.title.trim() || r.qty || r.unitPrice);
     for (const r of used) {
       const n = rows.indexOf(r) + 1;
-      if (selling && !r.sourceItemId) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT / รายการซื้อไหน`);
+      if (selling && !r.sourceItemId && !r.noLot) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT ไหน หรือ "ไม่ระบุ LOT"`);
       if (!r.title.trim()) return setError(`แถวที่ ${n}: กรุณากรอกชื่อรายการ`);
       if (!(num(r.qty) > 0)) return setError(`แถวที่ ${n}: กรุณากรอกจำนวน`);
       if (!Number.isFinite(num(r.unitPrice))) return setError(`แถวที่ ${n}: กรุณากรอก${text.price}`);
@@ -206,7 +220,7 @@ export function TradeForm({
     });
     const common = { id: initial.id, party, paymentMethod: head.paymentMethod, note: head.note };
     const res = selling
-      ? await saveSale({ ...common, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId! })) })
+      ? await saveSale({ ...common, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId })) })
       : await saveBill({
           ...common,
           billDate: head.date,
@@ -312,19 +326,21 @@ export function TradeForm({
                       <div className="min-w-0 flex-1">
                         <ItemPicker
                           icon={Package}
-                          value={src ? `${src.lotNo} · ${src.title}` : ""}
-                          linked={!!src}
+                          value={src ? `${src.lotNo} · ${src.title}` : r.noLot ? "ไม่ระบุ LOT (กองรวม)" : ""}
+                          linked={!!src || !!r.noLot}
                           options={sourceOptions}
                           placeholder="ขายจาก LOT / รายการซื้อไหน — ค้นหาเลข LOT, note, รายการ"
                           emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
-                          onType={() => patch(r.key, { sourceItemId: null })}
+                          onType={() => patch(r.key, { sourceItemId: null, noLot: false })}
                           onPick={(o) => pickSource(r, o.source)}
-                          right={(o) => (
-                            <span className="text-right text-xs text-slate-500">
-                              ทุนคงเหลือ
-                              <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
-                            </span>
-                          )}
+                          right={(o) =>
+                            o.source && (
+                              <span className="text-right text-xs text-slate-500">
+                                ทุนคงเหลือ
+                                <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
+                              </span>
+                            )
+                          }
                         />
                       </div>
                     </div>
@@ -459,6 +475,9 @@ export function TradeForm({
               {fmtMoney(total)} <span className="text-base font-normal text-white/60">บาท</span>
             </div>
           </div>
+          <Button type="button" variant="ghost" onClick={() => setPreview(true)} className="w-full text-white/80 hover:bg-white/10 hover:text-white">
+            <Eye className="size-4" /> ดูตัวอย่าง{selling ? "ใบขาย" : "บิล"} A5
+          </Button>
           {selling || initial.hasBillNo ? (
             <Button onClick={() => submit(false)} disabled={!!saving} className="h-12 text-base">
               {saving ? <LoaderCircle className="size-5 animate-spin" /> : <Save className="size-5" />} {selling ? "บันทึกการขาย" : "บันทึก"}
@@ -481,6 +500,28 @@ export function TradeForm({
         </div>
       </Card>
       <FormError message={error} />
+      {preview && (
+        <DocPreview
+          settings={settings}
+          onClose={() => setPreview(false)}
+          doc={{
+            kind: mode,
+            no: selling ? (initial.id ? fmtSaleNo(initial.id) : null) : initial.billNo ? fmtBillNo(initial.billNo) : null,
+            lotNo: initial.lotNo,
+            party: party.name || null,
+            date: new Date(`${head.date}T12:00:00+07:00`).toISOString(),
+            paymentMethod: head.paymentMethod,
+            total,
+            note: head.note || null,
+            bankLine: selling
+              ? settings.bank_account && `โอนเข้าบัญชีร้าน ${settings.bank_name} ${settings.bank_account}${settings.bank_account_name ? ` (${settings.bank_account_name})` : ""}`
+              : party.bankAccount && `โอนเข้า ${party.bankName} ${party.bankAccount}`,
+            items: rows
+              .filter((r) => r.title.trim())
+              .map((r) => ({ title: r.title, unitName: r.unitName || null, qty: num(r.qty) || 0, unitPrice: num(r.unitPrice) || 0, amount: amountOf(r) })),
+          }}
+        />
+      )}
     </div>
   );
 }

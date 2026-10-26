@@ -82,9 +82,17 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   shop_name: "ร้าน บุญมี รีไซเคิล",
   phones: "",
   tagline: "",
+  address: "",
   open_hours: "",
+  hours: "",
   line_url: "",
+  facebook: "",
   website: "",
+  logo_image: "",
+  line_qr_image: "",
+  bank_name: "",
+  bank_account: "",
+  bank_account_name: "",
 };
 
 export async function getSettings(): Promise<ShopSettings> {

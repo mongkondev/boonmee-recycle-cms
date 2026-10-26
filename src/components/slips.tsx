@@ -4,19 +4,8 @@ import { ImagePlus, LoaderCircle, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { addAttachment, deleteAttachment, type AttachTarget } from "@/lib/attachment-actions";
+import { shrinkImage } from "@/lib/shrink-image";
 import { Card, FormError } from "./ui";
-
-/** Phone photos are several MB: shrink to ≤1600px JPEG before upload. */
-async function shrink(file: File): Promise<File> {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", 0.85));
-  return new File([blob], "slip.jpg", { type: "image/jpeg" });
-}
 
 /** Payment slips attached to a purchase or sale: thumbnails, add, remove. */
 export function Slips({ target, items }: { target: AttachTarget; items: { id: number; imageId: string }[] }) {
@@ -32,7 +21,7 @@ export function Slips({ target, items }: { target: AttachTarget; items: { id: nu
     try {
       for (const f of Array.from(files)) {
         const fd = new FormData();
-        fd.set("file", await shrink(f));
+        fd.set("file", await shrinkImage(f));
         const res = await addAttachment(target, fd);
         if (!res.ok) throw new Error(res.error);
       }

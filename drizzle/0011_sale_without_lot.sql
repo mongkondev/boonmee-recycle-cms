@@ -1,0 +1,1 @@
+ALTER TABLE "sale_items" ALTER COLUMN "source_item_id" DROP NOT NULL;

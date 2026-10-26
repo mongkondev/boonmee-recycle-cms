@@ -2,13 +2,20 @@ import { TradeForm } from "@/components/trade-form";
 import { PageHeader } from "@/components/ui";
 import { bangkokToday } from "@/lib/bill";
 import { emptyParty } from "@/lib/party";
-import { getUnits } from "@/lib/queries";
+import { getSettings, getUnits } from "@/lib/queries";
 import { getCustomers, getSellProducts, getSourceOptions } from "@/lib/trade-queries";
 
 export const metadata = { title: "ขายออก" };
 
 export default async function NewSalePage({ searchParams }: { searchParams: Promise<{ lot?: string }> }) {
-  const [products, sources, customers, units, sp] = await Promise.all([getSellProducts(), getSourceOptions(), getCustomers(), getUnits(), searchParams]);
+  const [products, sources, customers, units, settings, sp] = await Promise.all([
+    getSellProducts(),
+    getSourceOptions(),
+    getCustomers(),
+    getUnits(),
+    getSettings(),
+    searchParams,
+  ]);
   // opened from a lot page: start the first line on that lot
   const first = sp.lot ? sources.find((s) => String(s.lotId) === sp.lot) : undefined;
   return (
@@ -20,6 +27,7 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
         sources={sources}
         customers={customers}
         units={units.map((u) => u.name)}
+        settings={settings}
         initial={{
           party: emptyParty(),
           date: bangkokToday(),

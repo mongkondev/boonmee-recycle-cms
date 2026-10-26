@@ -40,7 +40,19 @@ export type ShopSettings = {
   shop_name: string;
   phones: string;
   tagline: string;
+  address: string;
+  /** one-line summary printed on menus; derived from `hours` when that is set */
   open_hours: string;
+  /** JSON of DayHours[7], Sunday first (see lib/hours.ts) */
+  hours: string;
   line_url: string;
+  facebook: string;
   website: string;
+  /** image ids (uuid) or "" */
+  logo_image: string;
+  line_qr_image: string;
+  /** shop account printed on sales slips paid by transfer */
+  bank_name: string;
+  bank_account: string;
+  bank_account_name: string;
 };

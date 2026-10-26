@@ -9,9 +9,11 @@ import {
   Menu,
   HandCoins,
   LayoutDashboard,
+  LoaderCircle,
   Package,
   ReceiptText,
   Boxes,
+  Contact,
   ChartColumn,
   Ruler,
   Settings,
@@ -19,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { logoutAction } from "@/app/login/actions";
@@ -52,6 +54,7 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
     group: "ข้อมูลหลัก",
     items: [
       { href: "/products", label: "สินค้ารับซื้อ", icon: Package },
+      { href: "/customers", label: "ลูกค้า", icon: Contact },
       { href: "/categories", label: "หมวดหมู่", icon: FolderTree },
       { href: "/units", label: "หน่วย", icon: Ruler },
     ],
@@ -66,6 +69,12 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
 ];
 
 const ALL = NAV.flatMap((g) => g.items);
+
+/** Spins on the menu item that was just tapped until its page arrives. */
+function PendingSpinner() {
+  const { pending } = useLinkStatus();
+  return pending ? <LoaderCircle className="ml-auto size-4 animate-spin" aria-label="กำลังโหลด" /> : null;
+}
 
 export function Shell({ user, children }: { user: { name: string; role: "super" | "admin" }; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -115,6 +124,7 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
                       >
                         <Icon className="size-4.5" />
                         {label}
+                        <PendingSpinner />
                       </Link>
                     </li>
                   );

@@ -8,7 +8,8 @@ import { db, schema } from "@/db";
 import { requireUser } from "./auth";
 import { buildMenu } from "./menu";
 import { passwordProblems } from "./password-policy";
-import { getProducts, getSettings } from "./queries";
+import { hoursSummary, parseHours } from "./hours";
+import { DEFAULT_SETTINGS, getProducts, getSettings } from "./queries";
 import type { ShopSettings } from "./types";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -343,15 +344,24 @@ export async function uploadImage(form: FormData): Promise<ActionResult<{ id: st
 
 export async function saveSettings(input: ShopSettings): Promise<ActionResult> {
   await requireUser();
-  const allowed: (keyof ShopSettings)[] = ["shop_name", "phones", "tagline", "open_hours", "line_url", "website"];
+  const values: ShopSettings = { ...input };
+  for (const key of ["logo_image", "line_qr_image"] as const) {
+    if (values[key] && !/^[0-9a-f-]{36}$/i.test(values[key])) return fail("รูปไม่ถูกต้อง");
+  }
+  // per-day hours are the source; the one-line summary on menus follows them
+  if (values.hours) {
+    const hours = parseHours(values.hours);
+    values.hours = JSON.stringify(hours);
+    values.open_hours = hoursSummary(hours);
+  }
+  const allowed = Object.keys(DEFAULT_SETTINGS) as (keyof ShopSettings)[];
   await db.transaction(async (tx) => {
     for (const key of allowed) {
-      const value = String(input[key] ?? "").trim().slice(0, 300);
+      const value = String(values[key] ?? "").trim().slice(0, key === "hours" ? 1000 : 300);
       await tx.insert(schema.settings).values({ key, value }).onConflictDoUpdate({ target: schema.settings.key, set: { value } });
     }
   });
-  revalidatePath("/settings");
-  revalidatePath("/export");
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 

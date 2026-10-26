@@ -78,6 +78,13 @@
       "when": 1792988608612,
       "tag": "0010_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792989134392,
+      "tag": "0011_sale_without_lot",
+      "breakpoints": true
     }
   ]
 }

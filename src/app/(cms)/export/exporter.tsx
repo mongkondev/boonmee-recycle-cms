@@ -2,11 +2,11 @@
 
 import { toPng } from "html-to-image";
 import { FileDown, ImageDown, LoaderCircle, Share2 } from "lucide-react";
-import QRCode from "qrcode";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, cn, Label, Toggle } from "@/components/ui";
 import { shareFilesNow } from "@/lib/render-image";
 import type { ProductRow, ShopSettings } from "@/lib/types";
+import { useLineQr } from "@/lib/use-line-qr";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 import { Poster, POSTER_H, POSTER_W, type PosterData, type PosterOptions } from "./poster";
 
@@ -30,16 +30,11 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
   const PREVIEW_W = usePreviewWidth(405);
   const [selected, setSelected] = useState<number[]>(posters.map((p) => p.id));
   const [options, setOptions] = useState<PosterOptions>({ columns: "auto", showUnit: true, showTrend: false, showDate: true, showSubName: true, showImage: false });
-  const [qr, setQr] = useState<string | null>(null);
+  const { qr } = useLineQr(settings, 380);
   const [busy, setBusy] = useState<string | null>(null);
   const refs = useRef(new Map<number, HTMLDivElement>());
   const [canShare, setCanShare] = useState(false);
   useEffect(() => setCanShare("canShare" in navigator), []);
-
-  useEffect(() => {
-    if (!settings.line_url) return setQr(null);
-    QRCode.toDataURL(settings.line_url, { margin: 0, width: 380, color: { dark: "#003020" } }).then(setQr);
-  }, [settings.line_url]);
 
   const chosen = posters.filter((p) => selected.includes(p.id));
   const fileBase = `เมนูราคา-${new Date().toISOString().slice(0, 10)}`;

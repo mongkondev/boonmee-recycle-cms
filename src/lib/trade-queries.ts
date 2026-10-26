@@ -240,7 +240,11 @@ export async function getTotals(r: DayRange) {
       (select coalesce(sum(total), 0) from bills b where ${inRange(sql`b.bill_date`, r)}) as buy_amount,
       (select coalesce(sum(total), 0) from bills b where b.payment_method = 'cash' and ${inRange(sql`b.bill_date`, r)}) as buy_cash,
       (select count(*)::int from sales s where ${inRange(sql`s.sale_date`, r)}) as sell_count,
-      (select coalesce(sum(total), 0) from sales s where ${inRange(sql`s.sale_date`, r)}) as sell_amount
+      (select coalesce(sum(total), 0) from sales s where ${inRange(sql`s.sale_date`, r)}) as sell_amount,
+      (select count(*)::int from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_count,
+      (select coalesce(sum(
+         coalesce((select sum(si.amount) from sale_items si join bill_items i on i.id = si.source_item_id where i.bill_id = b.id), 0) - b.total
+       ), 0) from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_profit
   `);
   return {
     buyCount: row.buy_count as number,
@@ -248,6 +252,9 @@ export async function getTotals(r: DayRange) {
     buyCash: Number(row.buy_cash),
     sellCount: row.sell_count as number,
     sellAmount: Number(row.sell_amount),
+    /** lots closed in the range: what they sold minus what they cost */
+    closedCount: row.closed_count as number,
+    closedProfit: Number(row.closed_profit),
   };
 }
 
@@ -296,4 +303,34 @@ export async function getAttachments(target: { billId: number } | { saleId: numb
     .from(schema.attachments)
     .where(eq(col, id))
     .orderBy(asc(schema.attachments.id));
+}
+
+/** Customers with what the shop bought from / sold to each of them. */
+export async function getCustomerStats(search = "") {
+  const q = search.trim();
+  const like = `%${q}%`;
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    select c.id, c.name, c.phone, c.bank_name, c.bank_account,
+           (select count(*)::int from bills b where b.customer_id = c.id) as buy_count,
+           (select coalesce(sum(total), 0) from bills b where b.customer_id = c.id) as buy_amount,
+           (select count(*)::int from sales s where s.customer_id = c.id) as sell_count,
+           (select coalesce(sum(total), 0) from sales s where s.customer_id = c.id) as sell_amount,
+           greatest((select max(b.bill_date) from bills b where b.customer_id = c.id),
+                    (select max(s.sale_date) from sales s where s.customer_id = c.id)) as last_used
+    from customers c
+    ${q ? sql`where c.name ilike ${like} or c.phone ilike ${like} or c.bank_account ilike ${like}` : sql``}
+    order by last_used desc nulls last, c.name
+  `);
+  return rows.map((r) => ({
+    id: r.id as number,
+    name: r.name as string,
+    phone: r.phone as string | null,
+    bankName: r.bank_name as string | null,
+    bankAccount: r.bank_account as string | null,
+    buyCount: r.buy_count as number,
+    buyAmount: Number(r.buy_amount),
+    sellCount: r.sell_count as number,
+    sellAmount: Number(r.sell_amount),
+    lastUsed: r.last_used ? new Date(r.last_used as string).toISOString() : null,
+  }));
 }

@@ -3,7 +3,7 @@ import { TradeForm } from "@/components/trade-form";
 import { PageHeader } from "@/components/ui";
 import { bangkokDay, fmtSaleNo } from "@/lib/bill";
 import { toParty } from "@/lib/party";
-import { getUnits } from "@/lib/queries";
+import { getSettings, getUnits } from "@/lib/queries";
 import { getCustomers, getSale, getSellProducts, getSourceOptions } from "@/lib/trade-queries";
 
 export const metadata = { title: "แก้ไขใบขาย" };
@@ -12,7 +12,13 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
   const id = Number((await params).id);
   const sale = Number.isInteger(id) ? await getSale(id) : null;
   if (!sale) notFound();
-  const [products, sources, customers, units] = await Promise.all([getSellProducts(), getSourceOptions(id), getCustomers(), getUnits()]);
+  const [products, sources, customers, units, settings] = await Promise.all([
+    getSellProducts(),
+    getSourceOptions(id),
+    getCustomers(),
+    getUnits(),
+    getSettings(),
+  ]);
   return (
     <>
       <PageHeader title={`แก้ไขใบขาย ${fmtSaleNo(sale.id)}`} description="ทุนคงเหลือที่แสดงคิดคืนยอดของใบขายนี้ให้แล้ว" />
@@ -22,6 +28,7 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
         sources={sources}
         customers={customers}
         units={units.map((u) => u.name)}
+        settings={settings}
         initial={{
           id: sale.id,
           party: toParty(sale.buyerName, sale.customer),
@@ -30,6 +37,7 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
           note: sale.note ?? "",
           rows: sale.items.map((i) => ({
             sourceItemId: i.sourceItemId,
+            noLot: i.sourceItemId === null,
             productId: i.productId,
             title: i.title,
             unitName: i.unitName ?? "",

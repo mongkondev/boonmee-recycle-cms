@@ -44,6 +44,9 @@ export function SaleView({ sale, settings, slips, fresh }: { sale: Sale; setting
           paymentMethod: sale.paymentMethod,
           total: sale.total,
           note: sale.note,
+          bankLine: settings.bank_account
+            ? `โอนเข้าบัญชีร้าน ${settings.bank_name} ${settings.bank_account}${settings.bank_account_name ? ` (${settings.bank_account_name})` : ""}`
+            : null,
           items: sale.items,
         }}
         settings={settings}

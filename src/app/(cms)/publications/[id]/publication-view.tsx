@@ -3,7 +3,6 @@
 import { ArrowLeft, CheckCircle2, FileDown, ImageDown, LoaderCircle, RefreshCw, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import QRCode from "qrcode";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MenuA4Page } from "@/components/menu-a4";
 import { TrendBadge } from "@/components/trend";
@@ -13,6 +12,7 @@ import { A4, paginate } from "@/lib/menu";
 import type { getPublication } from "@/lib/queries";
 import { dataUrlToFile, downloadUrl, imagesToA4Pdf, renderNode, shareFilesNow } from "@/lib/render-image";
 import { fmtDate, fmtPrice } from "@/lib/trend";
+import { useLineQr } from "@/lib/use-line-qr";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 
 type Pub = NonNullable<Awaited<ReturnType<typeof getPublication>>>;
@@ -21,8 +21,7 @@ export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
   const router = useRouter();
   const pages = useMemo(() => paginate(pub.snapshot), [pub.snapshot]);
   const PREVIEW_W = usePreviewWidth(360);
-  const [qr, setQr] = useState<string | null>(null);
-  const [qrReady, setQrReady] = useState(!pub.snapshot.settings.line_url);
+  const { qr, ready: qrReady } = useLineQr(pub.snapshot.settings, 300);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>();
   const [canShare, setCanShare] = useState(false);
@@ -33,14 +32,6 @@ export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
   const stored = pub.pages.length === pages.length;
 
   useEffect(() => setCanShare("canShare" in navigator), []);
-  useEffect(() => {
-    const url = pub.snapshot.settings.line_url;
-    if (!url) return;
-    QRCode.toDataURL(url, { margin: 0, width: 300, color: { dark: "#003020" } }).then((d) => {
-      setQr(d);
-      setQrReady(true);
-    });
-  }, [pub.snapshot.settings.line_url]);
 
   /** Render each A4 page from the snapshot and store it on the server. */
   const generate = useCallback(async () => {

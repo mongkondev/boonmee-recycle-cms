@@ -30,7 +30,8 @@ const firstIssue = (e: z.ZodError) => {
 /* ---------------- sales ---------------- */
 
 const saleItemSchema = z.object({
-  sourceItemId: z.number({ message: "กรุณาเลือกว่าขายจากรายการซื้อ / LOT ไหน" }).int(),
+  // null = from the mixed pile (ไม่ระบุ LOT)
+  sourceItemId: z.number().int().nullable(),
   productId: z.number().int().nullable(),
   title: z.string().trim().min(1, "กรุณากรอกรายการที่ขาย").max(200),
   unitName: z.string().trim().max(40).nullable(),
@@ -60,8 +61,10 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
     const unitPrice = round(it.unitPrice, 2);
     return { ...it, unitName: it.unitName || null, qty, unitPrice, amount: round(qty * unitPrice, 2), lineNo: i + 1 };
   });
-  const sourceIds = [...new Set(lines.map((l) => l.sourceItemId))];
-  const found = await db.select({ id: schema.billItems.id }).from(schema.billItems).where(inArray(schema.billItems.id, sourceIds));
+  const sourceIds = [...new Set(lines.flatMap((l) => (l.sourceItemId ? [l.sourceItemId] : [])))];
+  const found = sourceIds.length
+    ? await db.select({ id: schema.billItems.id }).from(schema.billItems).where(inArray(schema.billItems.id, sourceIds))
+    : [];
   if (found.length !== sourceIds.length) return { ok: false, error: "ไม่พบรายการซื้อที่เลือก อาจถูกแก้ไขหรือลบไปแล้ว" };
 
   const total = round(lines.reduce((s, l) => s + l.amount, 0), 2);
@@ -114,5 +117,38 @@ export async function saveLotNote(id: number, note: string): Promise<ActionResul
   await db.update(schema.bills).set({ lotNote: note.trim().slice(0, 500) || null }).where(eq(schema.bills.id, id));
   revalidatePath(`/lots/${id}`);
   revalidatePath("/lots");
+  return { ok: true };
+}
+
+/* ---------------- customers ---------------- */
+
+const customerSchema = z.object({
+  name: z.string().trim().min(1, "กรุณากรอกชื่อ").max(120),
+  phone: z.string().trim().max(40).transform((v) => v || null),
+  bankName: z.string().trim().max(60).transform((v) => v || null),
+  bankAccount: z.string().trim().max(40).transform((v) => v || null),
+});
+
+export async function saveCustomer(id: number, input: z.input<typeof customerSchema>): Promise<ActionResult> {
+  await requireUser();
+  const parsed = customerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const dup = await db.query.customers.findFirst({ where: eq(schema.customers.name, parsed.data.name) });
+  if (dup && dup.id !== id) return { ok: false, error: "มีลูกค้าชื่อนี้อยู่แล้ว" };
+  await db.transaction(async (tx) => {
+    await tx.update(schema.customers).set(parsed.data).where(eq(schema.customers.id, id));
+    // a rename is usually a typo fix: keep the names on their bills and sales in step
+    await tx.update(schema.bills).set({ customerName: parsed.data.name }).where(eq(schema.bills.customerId, id));
+    await tx.update(schema.sales).set({ buyerName: parsed.data.name }).where(eq(schema.sales.customerId, id));
+  });
+  revalidatePath("/customers");
+  return { ok: true };
+}
+
+/** Remove a customer from the list; their bills and sales keep the name as printed. */
+export async function deleteCustomer(id: number): Promise<ActionResult> {
+  await requireUser();
+  await db.delete(schema.customers).where(eq(schema.customers.id, id));
+  revalidatePath("/customers");
   return { ok: true };
 }

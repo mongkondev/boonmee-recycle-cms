@@ -238,9 +238,8 @@ export const saleItems = pgTable(
       .references(() => sales.id, { onDelete: "cascade" }),
     lineNo: integer("line_no").notNull(),
     // the purchase line (and so the lot) the sale is deducted from, e.g. copper sold out of a bought fridge
-    sourceItemId: integer("source_item_id")
-      .notNull()
-      .references(() => billItems.id, { onDelete: "restrict" }),
+    // null = sold from the mixed pile, not from a particular lot
+    sourceItemId: integer("source_item_id").references(() => billItems.id, { onDelete: "restrict" }),
     // what was actually sold
     productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
     title: text("title").notNull(),

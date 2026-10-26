@@ -51,12 +51,18 @@ export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: 
 
       {/* header */}
       <header className="relative flex items-start gap-5">
-        <div className="grid size-[76px] shrink-0 place-items-center rounded-[20px]" style={{ background: GREEN }}>
-          <RecycleMark size={48} className="text-white" />
-        </div>
+        {settings.logo_image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/images/${settings.logo_image}`} alt="" className="size-[76px] shrink-0 rounded-[20px] object-contain" />
+        ) : (
+          <div className="grid size-[76px] shrink-0 place-items-center rounded-[20px]" style={{ background: GREEN }}>
+            <RecycleMark size={48} className="text-white" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="text-[30px] leading-[1.2] font-bold">{settings.shop_name}</div>
           {settings.tagline && <div className="truncate text-[15px] text-[#4b5d52]">{settings.tagline}</div>}
+          {settings.address && <div className="truncate text-[14px] text-[#4b5d52]">{settings.address}</div>}
           {phones.length > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-x-3 text-[16px] font-medium">
               <Phone className="size-4" style={{ color: GREEN }} strokeWidth={2.4} />
