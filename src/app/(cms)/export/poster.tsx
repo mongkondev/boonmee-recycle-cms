@@ -58,7 +58,7 @@ export const Poster = forwardRef<HTMLDivElement, { data: PosterData; settings: S
     }, [scale, data, options]);
 
     const phones = settings.phones.split(",").map((s) => s.trim()).filter(Boolean);
-    const today = new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+    const today = new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
 
     return (
       <div

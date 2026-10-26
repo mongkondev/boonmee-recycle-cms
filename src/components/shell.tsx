@@ -150,7 +150,7 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
         </div>
         <div className="ml-auto flex items-center gap-3">
           <span className="hidden text-sm text-slate-500 md:inline">
-            {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" })}
           </span>
           <div className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pr-1 pl-3">
             <span className="text-sm font-medium text-slate-700">{user.name}</span>

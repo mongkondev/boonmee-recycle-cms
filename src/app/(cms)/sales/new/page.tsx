@@ -21,7 +21,7 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
     <>
       <TradeForm
         title="ขายออก / รายรับ"
-        description="แต่ละแถวเลือกว่าขายจาก LOT / รายการซื้อไหน แล้วใส่ของที่ขายจริง เช่น ทองแดงจาก LOT ตู้เย็น ยอดขายจะหักทุนคงเหลือของ LOT"
+        description="เลือก LOT ครั้งเดียว แล้วเพิ่มของที่ขายจริงได้หลายรายการ เช่น ทองแดง เหล็ก จาก LOT ตู้เย็น · ยอดขายหักทุนคงเหลือของ LOT"
         mode="sell"
         products={products}
         sources={sources}

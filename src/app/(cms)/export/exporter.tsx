@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, cn, Label, Toggle } from "@/components/ui";
 import { shareFilesNow } from "@/lib/render-image";
 import type { ProductRow, ShopSettings } from "@/lib/types";
+import { bangkokToday } from "@/lib/bill";
 import { useLineQr } from "@/lib/use-line-qr";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 import { Poster, POSTER_H, POSTER_W, type PosterData, type PosterOptions } from "./poster";
@@ -37,7 +38,7 @@ export function Exporter({ products, settings }: { products: ProductRow[]; setti
   useEffect(() => setCanShare("canShare" in navigator), []);
 
   const chosen = posters.filter((p) => selected.includes(p.id));
-  const fileBase = `เมนูราคา-${new Date().toISOString().slice(0, 10)}`;
+  const fileBase = `เมนูราคา-${bangkokToday()}`;
 
   const render = async (id: number) => {
     const node = refs.current.get(id)!;

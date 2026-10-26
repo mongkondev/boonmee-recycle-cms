@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MenuA4Page } from "@/components/menu-a4";
 import { TrendBadge } from "@/components/trend";
 import { Button, Card, PageHeader } from "@/components/ui";
+import { bangkokDay } from "@/lib/bill";
 import { savePublicationPage, trimPublicationPages } from "@/lib/actions";
 import { A4, paginate } from "@/lib/menu";
 import type { getPublication } from "@/lib/queries";
@@ -28,7 +29,7 @@ export function PublicationView({ pub, fresh }: { pub: Pub; fresh: boolean }) {
   const refs = useRef(new Map<number, HTMLDivElement>());
   const started = useRef(false);
   const date = new Date(pub.publishedAt);
-  const fileBase = `เมนูราคา-${pub.publishedAt.slice(0, 10)}-${pub.id}`;
+  const fileBase = `เมนูราคา-${bangkokDay(new Date(pub.publishedAt))}-${pub.id}`;
   const stored = pub.pages.length === pages.length;
 
   useEffect(() => setCanShare("canShare" in navigator), []);

@@ -27,6 +27,8 @@ export type TradeOption = {
 
 type Row = {
   key: number;
+  /** selling: rows of one group share the lot they are sold from */
+  group: number;
   /** buying: the existing purchase line being edited */
   itemId?: number;
   /** selling: the purchase line (lot) this sale is deducted from */
@@ -58,7 +60,7 @@ export type TradeFormValues = {
   lotNote?: string;
   /** image ids of attached payment slips */
   slips?: string[];
-  rows: Omit<Row, "key">[];
+  rows: Omit<Row, "key" | "group">[];
 };
 
 const TEXT = {
@@ -67,9 +69,11 @@ const TEXT = {
 };
 
 let nextKey = 0;
-const blankRow = (sourceItemId: number | null = null): Row => ({
+const blankRow = (group = 0, sourceItemId: number | null = null, noLot = false): Row => ({
   key: nextKey++,
+  group,
   sourceItemId,
+  noLot,
   productId: null,
   title: "",
   unitName: "",
@@ -120,14 +124,20 @@ export function TradeForm({
   // a purchase bill prints like a 10-line paper pad; sales lines carry a lot picker each, so start with fewer
   const minRows = selling ? 3 : BILL_MIN_ROWS;
   const [rows, setRows] = useState<Row[]>(() => {
-    const filled = initial.rows.map((r) => ({ ...r, key: nextKey++ }));
-    return [...filled, ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow())];
+    // consecutive lines sold from the same lot form one group
+    let group = 0;
+    const filled = initial.rows.map((r, i) => {
+      const prev = initial.rows[i - 1];
+      if (prev && (prev.sourceItemId !== r.sourceItemId || !!prev.noLot !== !!r.noLot)) group++;
+      return { ...r, group, key: nextKey++ };
+    });
+    const last = filled.at(-1);
+    return [
+      ...filled,
+      ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow(group, last?.sourceItemId ?? null, !!last?.noLot)),
+    ];
   });
-  // selling: new lines default to the lot line picked last
-  const [lastSource, setLastSource] = useState<{ id: number | null; noLot: boolean } | null>(() => {
-    const r = initial.rows.at(-1);
-    return r ? { id: r.sourceItemId, noLot: !!r.noLot } : null;
-  });
+  const groups = [...new Set(rows.map((r) => r.group))];
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
@@ -171,18 +181,32 @@ export function TradeForm({
 
   const patch = (key: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
-  const addRow = () => {
+  /** Add a line (selling: inside `group`, sold from the same lot as the rest of the group). */
+  const addRow = (group = groups.at(-1) ?? 0) => {
     if (rows.length >= BILL_MAX_ROWS) return;
-    const r = { ...blankRow(selling ? (lastSource?.id ?? null) : null), noLot: selling && !!lastSource?.noLot };
-    setRows((rs) => [...rs, r]);
+    const first = rows.find((x) => x.group === group);
+    const r = blankRow(group, first?.sourceItemId ?? null, !!first?.noLot);
+    setRows((rs) => {
+      const at = rs.findLastIndex((x) => x.group === group) + 1;
+      return at ? [...rs.slice(0, at), r, ...rs.slice(at)] : [...rs, r];
+    });
     focus(r.key, "title");
   };
 
-  /** Next row's title field; grows the form when Enter is pressed on the last row. */
+  /** Selling from another lot in the same sale. */
+  const addGroup = () => {
+    if (rows.length >= BILL_MAX_ROWS) return;
+    const r = blankRow(Math.max(...groups) + 1);
+    setRows((rs) => [...rs, r]);
+    focus(r.key, "source");
+  };
+
+  /** Next row's title field; grows the form (or the lot group) when Enter is pressed on its last row. */
   const goNextRow = (key: number) => {
     const i = rows.findIndex((r) => r.key === key);
-    if (i < rows.length - 1) focus(rows[i + 1].key, "title");
-    else addRow();
+    const next = rows[i + 1];
+    if (next && (!selling || next.group === rows[i].group)) focus(next.key, "title");
+    else addRow(rows[i].group);
   };
 
   const pickItem = (row: Row, o: TradeOption) => {
@@ -191,27 +215,28 @@ export function TradeForm({
       title: o.title,
       unitName: o.unitName ?? "",
       unitPrice: o.price === null ? row.unitPrice : String(o.price),
-      ...(selling && !row.sourceItemId && !row.noLot && lastSource && { sourceItemId: lastSource.id, noLot: lastSource.noLot }),
     });
     focus(row.key, "qty");
   };
 
-  const pickSource = (row: Row, s: SourceOption | null) => {
-    setLastSource({ id: s?.id ?? null, noLot: !s });
-    // selling the purchased item as it is: start from the same item, it can be changed to the part sold
-    patch(
-      row.key,
-      s
-        ? { sourceItemId: s.id, noLot: false, sourceQuery: "", ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) }
-        : { sourceItemId: null, noLot: true, sourceQuery: "" },
-    );
-    focus(row.key, "title");
+  const setGroupSource = (group: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.group === group ? { ...r, ...p } : r)));
+
+  const pickSource = (group: number, s: SourceOption | null) => {
+    setGroupSource(group, { sourceItemId: s?.id ?? null, noLot: !s, sourceQuery: "" });
+    const first = rows.find((r) => r.group === group)!;
+    // selling the purchased item as it is: start the first line from the same item; it can be changed to the part sold
+    if (s && !first.title) patch(first.key, { title: s.title, unitName: s.unitName ?? "" });
+    focus(first.key, "title");
   };
 
   const removeRow = (key: number) =>
     setRows((rs) => {
+      const gone = rs.find((r) => r.key === key)!;
       const left = rs.filter((r) => r.key !== key);
-      return left.length >= minRows ? left : [...left, blankRow()];
+      if (!selling) return left.length >= minRows ? left : [...left, blankRow()];
+      // keep the lot group alive with an empty line while it is the only group
+      if (left.some((r) => r.group === gone.group) || left.length) return left;
+      return [blankRow(gone.group, gone.sourceItemId, !!gone.noLot)];
     });
 
   async function submit(issueBill: boolean) {
@@ -249,6 +274,76 @@ export function TradeForm({
     }
     router.push(`/${selling ? "sales" : "bills"}/${res.data!.id}?fresh=1`);
   }
+
+  /** One line: item, quantity, unit, price, amount. */
+  const renderRow = (r: Row, i: number) => (
+    <div key={r.key} className="py-2.5 sm:py-1.5">
+      <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_2.25rem] items-center gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_6.5rem_5.5rem_7.5rem_8rem_2.25rem]">
+        <span className="text-center text-sm text-slate-400 tabular-nums">{i + 1}</span>
+        <ItemPicker
+          inputRef={reg(r.key, "title")}
+          value={r.title}
+          linked={r.productId !== null}
+          options={products}
+          placeholder={selling ? "รายการที่ขาย เช่น ทองแดง" : "ค้นหาหรือพิมพ์รายการ"}
+          onType={(title) => patch(r.key, { title, productId: null })}
+          onPick={(o) => pickItem(r, o)}
+          right={(o) =>
+            o.price !== null && (
+              <span className="text-sm font-semibold text-brand-700 tabular-nums">
+                {fmtPrice(o.price)}
+                {o.unitName && <span className="text-xs font-normal text-slate-400">/{o.unitName}</span>}
+              </span>
+            )
+          }
+        />
+        <button
+          type="button"
+          onClick={() => removeRow(r.key)}
+          className="grid size-9 place-items-center rounded-lg text-slate-300 hover:bg-accent-50 hover:text-accent-500 sm:order-last"
+          aria-label={`ลบแถวที่ ${i + 1}`}
+        >
+          <Trash2 className="size-4" />
+        </button>
+        {/* on phones the numbers wrap to a second line under the item name */}
+        <div className="col-span-3 grid grid-cols-[1fr_4.5rem_1fr] gap-2 pl-[2.25rem] sm:contents">
+          <PriceInput
+            ref={reg(r.key, "qty")}
+            value={r.qty}
+            onValueChange={(qty) => patch(r.key, { qty })}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), focus(r.key, "price"))}
+            placeholder="จำนวน"
+            aria-label={`จำนวน แถวที่ ${i + 1}`}
+            className={cn(inputCls, "text-right")}
+          />
+          <select
+            value={r.unitName}
+            onChange={(e) => patch(r.key, { unitName: e.target.value })}
+            aria-label={`หน่วย แถวที่ ${i + 1}`}
+            className={cn(inputCls, "bg-white px-1.5", !r.unitName && "text-slate-400")}
+          >
+            <option value="">หน่วย</option>
+            {(r.unitName && !units.includes(r.unitName) ? [r.unitName, ...units] : units).map((u) => (
+              <option key={u} value={u}>{u}</option>
+            ))}
+          </select>
+          <PriceInput
+            ref={reg(r.key, "price")}
+            value={r.unitPrice}
+            onValueChange={(unitPrice) => patch(r.key, { unitPrice })}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), goNextRow(r.key))}
+            placeholder="ราคา/หน่วย"
+            aria-label={`${text.price} แถวที่ ${i + 1}`}
+            className={cn(inputCls, "text-right")}
+          />
+          <div className="col-span-3 flex items-center justify-end gap-2 text-sm sm:col-span-1">
+            <span className="text-xs text-slate-400 sm:hidden">ราคารวม</span>
+            <span className={cn("font-semibold tabular-nums", amountOf(r) ? "text-ink-900" : "text-slate-300")}>{fmtMoney(amountOf(r))}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -336,122 +431,68 @@ export function TradeForm({
           <span className="text-right">ราคารวม</span>
           <span />
         </div>
-        <div className="divide-y divide-slate-100">
-          {rows.map((r, i) => {
-            const src = r.sourceItemId ? sourceById.get(r.sourceItemId) : undefined;
-            const after = src ? Math.round((src.remaining - (usedBySource.get(src.id) ?? 0)) * 100) / 100 : 0;
-            return (
-              <div key={r.key} className="space-y-2 py-2.5 sm:space-y-1.5 sm:py-2">
-                {selling && (
-                  <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
-                    <span className="text-center text-sm text-slate-400 tabular-nums">{i + 1}</span>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="hidden shrink-0 text-xs text-slate-500 sm:inline">จาก LOT</span>
-                      <div className="min-w-0 flex-1">
-                        <ItemPicker
-                          icon={Package}
-                          value={src ? `${src.lotNo} · ${src.title}` : r.noLot ? "ไม่ระบุ LOT (กองรวม)" : (r.sourceQuery ?? "")}
-                          linked={!!src || !!r.noLot}
-                          options={sourceOptions}
-                          placeholder="ขายจาก LOT / รายการซื้อไหน — ค้นหาเลข LOT, note, รายการ"
-                          emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
-                          onType={(q) => patch(r.key, { sourceItemId: null, noLot: false, sourceQuery: q })}
-                          onPick={(o) => pickSource(r, o.source)}
-                          right={(o) =>
-                            o.source && (
-                              <span className="text-right text-xs text-slate-500">
-                                ทุนคงเหลือ
-                                <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
-                              </span>
-                            )
-                          }
-                        />
-                      </div>
+        {selling ? (
+          <div className="space-y-3">
+            {groups.map((g, gi) => {
+              const groupRows = rows.filter((r) => r.group === g);
+              const first = groupRows[0];
+              const src = first.sourceItemId ? sourceById.get(first.sourceItemId) : undefined;
+              const after = src ? Math.round((src.remaining - (usedBySource.get(src.id) ?? 0)) * 100) / 100 : 0;
+              return (
+                <div key={g} className="rounded-xl bg-slate-50/70 p-2 ring-1 ring-slate-200 sm:p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 rounded-md bg-ink-900 px-2 py-0.5 text-xs font-semibold text-white">LOT {gi + 1}</span>
+                    <div className="min-w-60 flex-1">
+                      <ItemPicker
+                        icon={Package}
+                        inputRef={reg(first.key, "source")}
+                        value={src ? `${src.lotNo} · ${src.title}` : first.noLot ? "ไม่ระบุ LOT (กองรวม)" : (first.sourceQuery ?? "")}
+                        linked={!!src || !!first.noLot}
+                        options={sourceOptions}
+                        placeholder="เลือก LOT / รายการซื้อ — ค้นหาเลข LOT, note, รายการ"
+                        emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
+                        onType={(q) => setGroupSource(g, { sourceItemId: null, noLot: false, sourceQuery: q })}
+                        onPick={(o) => pickSource(g, o.source)}
+                        right={(o) =>
+                          o.source && (
+                            <span className="text-right text-xs text-slate-500">
+                              ทุนคงเหลือ
+                              <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
+                            </span>
+                          )
+                        }
+                      />
                     </div>
                   </div>
-                )}
-                <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_2.25rem] items-center gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_6.5rem_5.5rem_7.5rem_8rem_2.25rem]">
-                  <span className="text-center text-sm text-slate-400 tabular-nums">{selling ? "" : i + 1}</span>
-                  <ItemPicker
-                    inputRef={reg(r.key, "title")}
-                    value={r.title}
-                    linked={r.productId !== null}
-                    options={products}
-                    placeholder={selling ? "รายการที่ขาย เช่น ทองแดง" : "ค้นหาหรือพิมพ์รายการ"}
-                    onType={(title) => patch(r.key, { title, productId: null })}
-                    onPick={(o) => pickItem(r, o)}
-                    right={(o) =>
-                      o.price !== null && (
-                        <span className="text-sm font-semibold text-brand-700 tabular-nums">
-                          {fmtPrice(o.price)}
-                          {o.unitName && <span className="text-xs font-normal text-slate-400">/{o.unitName}</span>}
-                        </span>
-                      )
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeRow(r.key)}
-                    className="grid size-9 place-items-center rounded-lg text-slate-300 hover:bg-accent-50 hover:text-accent-500 sm:order-last"
-                    aria-label={`ลบแถวที่ ${i + 1}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                  {/* on phones the numbers wrap to a second line under the item name */}
-                  <div className="col-span-3 grid grid-cols-[1fr_4.5rem_1fr] gap-2 pl-[2.25rem] sm:contents">
-                    <PriceInput
-                      ref={reg(r.key, "qty")}
-                      value={r.qty}
-                      onValueChange={(qty) => patch(r.key, { qty })}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), focus(r.key, "price"))}
-                      placeholder="จำนวน"
-                      aria-label={`จำนวน แถวที่ ${i + 1}`}
-                      className={cn(inputCls, "text-right")}
-                    />
-                    <select
-                      value={r.unitName}
-                      onChange={(e) => patch(r.key, { unitName: e.target.value })}
-                      aria-label={`หน่วย แถวที่ ${i + 1}`}
-                      className={cn(inputCls, "bg-white px-1.5", !r.unitName && "text-slate-400")}
-                    >
-                      <option value="">หน่วย</option>
-                      {(r.unitName && !units.includes(r.unitName) ? [r.unitName, ...units] : units).map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
-                    <PriceInput
-                      ref={reg(r.key, "price")}
-                      value={r.unitPrice}
-                      onValueChange={(unitPrice) => patch(r.key, { unitPrice })}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), goNextRow(r.key))}
-                      placeholder="ราคา/หน่วย"
-                      aria-label={`${text.price} แถวที่ ${i + 1}`}
-                      className={cn(inputCls, "text-right")}
-                    />
-                    <div className="col-span-3 flex items-center justify-end gap-2 text-sm sm:col-span-1">
-                      <span className="text-xs text-slate-400 sm:hidden">ราคารวม</span>
-                      <span className={cn("font-semibold tabular-nums", amountOf(r) ? "text-ink-900" : "text-slate-300")}>{fmtMoney(amountOf(r))}</span>
-                    </div>
+                  {src && (
+                    <p className="mt-1.5 px-1 text-xs text-slate-500">
+                      ทุนคงเหลือ {fmtMoney(src.remaining)} → หลังบันทึก{" "}
+                      {after >= 0 ? <b className="text-slate-700">{fmtMoney(after)}</b> : <b className="text-up">คืนทุนแล้ว กำไร +{fmtMoney(-after)}</b>}
+                    </p>
+                  )}
+                  <div className="mt-2 divide-y divide-slate-200/70 rounded-lg bg-white px-2 ring-1 ring-slate-100">
+                    {groupRows.map((r) => renderRow(r, rows.indexOf(r)))}
                   </div>
+                  <Button type="button" variant="ghost" size="sm" className="mt-1.5 text-brand-700" onClick={() => addRow(g)} disabled={rows.length >= BILL_MAX_ROWS}>
+                    <Plus className="size-4" /> เพิ่มรายการใน LOT นี้
+                  </Button>
                 </div>
-                {src && (
-                  <p className="pl-[2.25rem] text-xs text-slate-400 sm:pl-[3rem]">
-                    ทุนคงเหลือ {src.lotNo} · {src.title}: {fmtMoney(src.remaining)} → หลังบันทึก{" "}
-                    {after >= 0 ? (
-                      <b className="text-slate-600">{fmtMoney(after)}</b>
-                    ) : (
-                      <b className="text-up">คืนทุนแล้ว กำไร +{fmtMoney(-after)}</b>
-                    )}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">{rows.map((r, i) => renderRow(r, i))}</div>
+        )}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
-          <Button type="button" variant="secondary" onClick={addRow} disabled={rows.length >= BILL_MAX_ROWS}>
-            <Plus className="size-4" /> เพิ่มแถว
-          </Button>
+          {selling ? (
+            <Button type="button" variant="secondary" onClick={addGroup} disabled={rows.length >= BILL_MAX_ROWS}>
+              <Package className="size-4" /> ขายจาก LOT อื่นเพิ่ม
+            </Button>
+          ) : (
+            <Button type="button" variant="secondary" onClick={() => addRow()} disabled={rows.length >= BILL_MAX_ROWS}>
+              <Plus className="size-4" /> เพิ่มแถว
+            </Button>
+          )}
           <span className="text-xs text-slate-400">
             {filledCount} รายการ · สูงสุด {BILL_MAX_ROWS} แถว · Enter ที่ช่องราคาเพื่อไปแถวถัดไป
           </span>

@@ -20,5 +20,5 @@ export const priceLabel = (p: { price: number; priceNote: string | null }) =>
 
 export const fmtDate = (d: string | Date | null) =>
   d
-    ? new Date(d).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit" })
+    ? new Date(d).toLocaleString("th-TH", { day: "numeric", month: "short", year: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" })
     : "—";

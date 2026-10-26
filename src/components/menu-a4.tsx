@@ -26,7 +26,7 @@ export const MenuA4Page = forwardRef<HTMLDivElement, Props>(function MenuA4Page(
   ref,
 ) {
   const phones = settings.phones.split(",").map((s) => s.trim()).filter(Boolean);
-  const dateText = date.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+  const dateText = date.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
 
   return (
     <div

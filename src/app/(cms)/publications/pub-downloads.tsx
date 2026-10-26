@@ -2,12 +2,13 @@
 
 import { FileDown, ImageDown, LoaderCircle } from "lucide-react";
 import { useState } from "react";
+import { bangkokDay } from "@/lib/bill";
 import { downloadUrl, imagesToA4Pdf } from "@/lib/render-image";
 
 /** Download buttons on a publication card (the card itself links to the detail page). */
 export function PubDownloads({ id, publishedAt, pageIds }: { id: number; publishedAt: string; pageIds: string[] }) {
   const [busy, setBusy] = useState(false);
-  const base = `เมนูราคา-${publishedAt.slice(0, 10)}-${id}`;
+  const base = `เมนูราคา-${bangkokDay(new Date(publishedAt))}-${id}`;
   const urls = pageIds.map((p) => `/api/images/${p}`);
   if (!urls.length) return <p className="mt-3 text-xs text-amber-600">ยังไม่มีไฟล์ — เปิดเพื่อสร้างรูป</p>;
   const stop = (e: React.MouseEvent) => {

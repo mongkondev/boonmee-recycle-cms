@@ -19,7 +19,7 @@ function niceMax(v: number) {
   return ([1, 2, 5, 10].find((m) => m * p >= v) ?? 10) * p;
 }
 
-const dayLabel = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /** Grouped bars: money bought in vs sold out per day. One axis (both are baht). */
 export function BuySellChart({ data, height = 240 }: { data: Point[]; height?: number }) {
