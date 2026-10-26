@@ -4,7 +4,7 @@ import { Banknote, Eye, FileCheck2, Landmark, LoaderCircle, Package, Plus, Save,
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
 import { PriceInput } from "@/components/price-input";
-import { Button, Card, cn, FormError, Input, Label } from "@/components/ui";
+import { Button, Card, cn, FormError, Input, Label, PageHeader } from "@/components/ui";
 import { saveBill } from "@/lib/bill-actions";
 import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtBillNo, fmtMoney, fmtQty, fmtSaleNo } from "@/lib/bill";
 import { saveSale } from "@/lib/trade-actions";
@@ -12,6 +12,7 @@ import type { Customer, SourceOption } from "@/lib/trade-queries";
 import { fmtPrice } from "@/lib/trend";
 import type { ShopSettings } from "@/lib/types";
 import { DocPreview } from "./doc-preview";
+import { SlipField } from "./slips";
 
 /** A catalogue item that can be put on a line. */
 export type TradeOption = {
@@ -32,6 +33,8 @@ type Row = {
   sourceItemId: number | null;
   /** selling: explicitly sold from the mixed pile, not from a lot */
   noLot?: boolean;
+  /** selling: text typed into the lot search before a lot is picked */
+  sourceQuery?: string;
   productId: number | null;
   title: string;
   unitName: string;
@@ -53,6 +56,8 @@ export type TradeFormValues = {
   /** buying only: lot number of an existing purchase, and the internal lot note */
   lotNo?: string;
   lotNote?: string;
+  /** image ids of attached payment slips */
+  slips?: string[];
   rows: Omit<Row, "key">[];
 };
 
@@ -87,7 +92,11 @@ export function TradeForm({
   units,
   settings,
   initial,
+  title,
+  description,
 }: {
+  title: string;
+  description?: string;
   mode: "buy" | "sell";
   products: TradeOption[];
   /** unit names offered in the unit dropdown */
@@ -122,6 +131,7 @@ export function TradeForm({
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
+  const [slips, setSlips] = useState<string[]>(initial.slips ?? []);
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const reg = (key: number, field: string) => (el: HTMLInputElement | null) => {
     if (el) inputs.current.set(`${key}:${field}`, el);
@@ -189,7 +199,12 @@ export function TradeForm({
   const pickSource = (row: Row, s: SourceOption | null) => {
     setLastSource({ id: s?.id ?? null, noLot: !s });
     // selling the purchased item as it is: start from the same item, it can be changed to the part sold
-    patch(row.key, s ? { sourceItemId: s.id, noLot: false, ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) } : { sourceItemId: null, noLot: true });
+    patch(
+      row.key,
+      s
+        ? { sourceItemId: s.id, noLot: false, sourceQuery: "", ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) }
+        : { sourceItemId: null, noLot: true, sourceQuery: "" },
+    );
     focus(row.key, "title");
   };
 
@@ -218,7 +233,7 @@ export function TradeForm({
       qty: num(r.qty),
       unitPrice: num(r.unitPrice),
     });
-    const common = { id: initial.id, party, paymentMethod: head.paymentMethod, note: head.note };
+    const common = { id: initial.id, party, paymentMethod: head.paymentMethod, note: head.note, slipImageIds: slips };
     const res = selling
       ? await saveSale({ ...common, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId })) })
       : await saveBill({
@@ -237,6 +252,15 @@ export function TradeForm({
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <Button type="button" variant="secondary" onClick={() => setPreview(true)}>
+            <Eye className="size-4" /> ดูตัวอย่าง{selling ? "ใบขาย" : "บิล"} A5
+          </Button>
+        }
+      />
       <Card className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-[1fr_12rem_12rem]">
         <div className="sm:col-span-2 lg:col-span-1">
           <Label htmlFor="party">{text.party}</Label>
@@ -326,12 +350,12 @@ export function TradeForm({
                       <div className="min-w-0 flex-1">
                         <ItemPicker
                           icon={Package}
-                          value={src ? `${src.lotNo} · ${src.title}` : r.noLot ? "ไม่ระบุ LOT (กองรวม)" : ""}
+                          value={src ? `${src.lotNo} · ${src.title}` : r.noLot ? "ไม่ระบุ LOT (กองรวม)" : (r.sourceQuery ?? "")}
                           linked={!!src || !!r.noLot}
                           options={sourceOptions}
                           placeholder="ขายจาก LOT / รายการซื้อไหน — ค้นหาเลข LOT, note, รายการ"
                           emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
-                          onType={() => patch(r.key, { sourceItemId: null, noLot: false })}
+                          onType={(q) => patch(r.key, { sourceItemId: null, noLot: false, sourceQuery: q })}
                           onPick={(o) => pickSource(r, o.source)}
                           right={(o) =>
                             o.source && (
@@ -467,6 +491,10 @@ export function TradeForm({
             <Label htmlFor="note">หมายเหตุ</Label>
             <Input id="note" value={head.note} maxLength={500} placeholder="ไม่บังคับ" onChange={(e) => setHead({ ...head, note: e.target.value })} />
           </div>
+          <div>
+            <Label>สลิป / หลักฐานการ{selling ? "รับเงิน" : "จ่ายเงิน"}</Label>
+            <SlipField value={slips} onChange={setSlips} />
+          </div>
         </div>
         <div className="flex flex-col justify-between gap-4 rounded-xl bg-ink-900 p-5 text-white lg:min-w-80">
           <div>
@@ -475,7 +503,7 @@ export function TradeForm({
               {fmtMoney(total)} <span className="text-base font-normal text-white/60">บาท</span>
             </div>
           </div>
-          <Button type="button" variant="ghost" onClick={() => setPreview(true)} className="w-full text-white/80 hover:bg-white/10 hover:text-white">
+          <Button type="button" variant="secondary" onClick={() => setPreview(true)} className="w-full">
             <Eye className="size-4" /> ดูตัวอย่าง{selling ? "ใบขาย" : "บิล"} A5
           </Button>
           {selling || initial.hasBillNo ? (

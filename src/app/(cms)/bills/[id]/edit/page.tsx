@@ -1,10 +1,9 @@
 import { notFound } from "next/navigation";
 import { TradeForm } from "@/components/trade-form";
-import { PageHeader } from "@/components/ui";
 import { bangkokDay, fmtBillNo } from "@/lib/bill";
 import { toParty } from "@/lib/party";
 import { getBill, getBillProducts, getSettings, getUnits } from "@/lib/queries";
-import { getCustomers } from "@/lib/trade-queries";
+import { getAttachments, getCustomers } from "@/lib/trade-queries";
 
 export const metadata = { title: "แก้ไขรายการรับซื้อ" };
 
@@ -17,11 +16,12 @@ export default async function EditBillPage({ params }: { params: Promise<{ id: s
     getUnits(),
     getSettings(),
   ]);
+  const slips = Number.isInteger(id) ? await getAttachments({ billId: id }) : [];
   if (!bill) notFound();
   return (
     <>
-      <PageHeader title={bill.billNo ? `แก้ไขบิล ${fmtBillNo(bill.billNo)} · ${bill.lotNo}` : `แก้ไขรายการรับซื้อ ${bill.lotNo}`} />
       <TradeForm
+        title={bill.billNo ? `แก้ไขบิล ${fmtBillNo(bill.billNo)} · ${bill.lotNo}` : `แก้ไขรายการรับซื้อ ${bill.lotNo}`}
         mode="buy"
         products={products}
         customers={customers}
@@ -33,6 +33,7 @@ export default async function EditBillPage({ params }: { params: Promise<{ id: s
           billNo: bill.billNo,
           lotNo: bill.lotNo,
           lotNote: bill.lotNote ?? "",
+          slips: slips.map((s) => s.imageId),
           party: toParty(bill.customerName, bill.customer),
           date: bangkokDay(new Date(bill.billDate)),
           paymentMethod: bill.paymentMethod,

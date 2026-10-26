@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "./auth";
 import { BILL_MAX_ROWS, bangkokDay } from "./bill";
 import type { ActionResult } from "./actions";
+import { slipIdsSchema, syncAttachments } from "./attachments";
 import { partySchema, upsertCustomer } from "./customers";
 
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
@@ -30,6 +31,7 @@ const billSchema = z.object({
   issueBill: z.boolean(),
   note: z.string().trim().max(500).optional().transform((v) => v || null),
   lotNote: z.string().trim().max(500).optional().transform((v) => v || null),
+  slipImageIds: slipIdsSchema,
   items: z.array(itemSchema).min(1, "กรุณาเพิ่มอย่างน้อย 1 รายการ").max(BILL_MAX_ROWS, `บิลหนึ่งใบใส่ได้ไม่เกิน ${BILL_MAX_ROWS} รายการ`),
 });
 
@@ -44,7 +46,7 @@ export async function saveBill(input: BillInput): Promise<ActionResult<{ id: num
     const line = issue.path[0] === "items" && typeof issue.path[1] === "number" ? `แถวที่ ${issue.path[1] + 1}: ` : "";
     return { ok: false, error: line + issue.message };
   }
-  const { id, items, billDate, issueBill, party, ...rest } = parsed.data;
+  const { id, items, billDate, issueBill, party, slipImageIds, ...rest } = parsed.data;
   const lines = items.map((it, i) => {
     const qty = round(it.qty, 3);
     const unitPrice = round(it.unitPrice, 2);
@@ -95,6 +97,7 @@ export async function saveBill(input: BillInput): Promise<ActionResult<{ id: num
         }
       }
       if (issueBill) await assignBillNo(tx, billId);
+      await syncAttachments(tx, { billId }, slipImageIds);
       return billId;
     });
     revalidateBills();

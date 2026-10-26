@@ -1,5 +1,4 @@
 import { TradeForm } from "@/components/trade-form";
-import { PageHeader } from "@/components/ui";
 import { bangkokToday } from "@/lib/bill";
 import { emptyParty } from "@/lib/party";
 import { getBillProducts, getSettings, getUnits } from "@/lib/queries";
@@ -11,8 +10,9 @@ export default async function NewBillPage() {
   const [products, customers, units, settings] = await Promise.all([getBillProducts(), getCustomers(), getUnits(), getSettings()]);
   return (
     <>
-      <PageHeader title="รับซื้อเข้า / ออกบิล" description="ทุกการรับซื้อได้เลข LOT อัตโนมัติ · ราคาดึงจากราคาล่าสุด แก้ไขได้ · ยังไม่ออกบิลก็บันทึกไว้ก่อนได้" />
       <TradeForm
+        title="รับซื้อเข้า / ออกบิล"
+        description="ทุกการรับซื้อได้เลข LOT อัตโนมัติ · ราคาดึงจากราคาล่าสุด แก้ไขได้ · ยังไม่ออกบิลก็บันทึกไว้ก่อนได้"
         mode="buy"
         products={products}
         customers={customers}

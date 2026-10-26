@@ -1,5 +1,4 @@
 import { TradeForm } from "@/components/trade-form";
-import { PageHeader } from "@/components/ui";
 import { bangkokToday } from "@/lib/bill";
 import { emptyParty } from "@/lib/party";
 import { getSettings, getUnits } from "@/lib/queries";
@@ -20,8 +19,9 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
   const first = sp.lot ? sources.find((s) => String(s.lotId) === sp.lot) : undefined;
   return (
     <>
-      <PageHeader title="ขายออก / รายรับ" description="แต่ละแถวเลือกว่าขายจาก LOT / รายการซื้อไหน แล้วใส่ของที่ขายจริง เช่น ทองแดงจาก LOT ตู้เย็น ยอดขายจะหักทุนคงเหลือของ LOT" />
       <TradeForm
+        title="ขายออก / รายรับ"
+        description="แต่ละแถวเลือกว่าขายจาก LOT / รายการซื้อไหน แล้วใส่ของที่ขายจริง เช่น ทองแดงจาก LOT ตู้เย็น ยอดขายจะหักทุนคงเหลือของ LOT"
         mode="sell"
         products={products}
         sources={sources}

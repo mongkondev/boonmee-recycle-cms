@@ -7,6 +7,7 @@ import { db, schema } from "@/db";
 import type { ActionResult } from "./actions";
 import { requireUser } from "./auth";
 import { BILL_MAX_ROWS, bangkokDay } from "./bill";
+import { slipIdsSchema, syncAttachments } from "./attachments";
 import { partySchema, upsertCustomer } from "./customers";
 
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
@@ -45,6 +46,7 @@ const saleSchema = z.object({
   saleDate: z.string().date("วันที่ไม่ถูกต้อง"),
   paymentMethod: z.enum(["cash", "transfer"]),
   note: z.string().trim().max(500).optional().transform((v) => v || null),
+  slipImageIds: slipIdsSchema,
   items: z.array(saleItemSchema).min(1, "กรุณาเพิ่มอย่างน้อย 1 รายการ").max(BILL_MAX_ROWS, `ใส่ได้ไม่เกิน ${BILL_MAX_ROWS} รายการ`),
 });
 
@@ -55,7 +57,7 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
   const user = await requireUser();
   const parsed = saleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
-  const { id, items, saleDate, party, ...head } = parsed.data;
+  const { id, items, saleDate, party, slipImageIds, ...head } = parsed.data;
   const lines = items.map((it, i) => {
     const qty = round(it.qty, 3);
     const unitPrice = round(it.unitPrice, 2);
@@ -88,6 +90,7 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
       saleId = row.id;
     }
     await tx.insert(schema.saleItems).values(lines.map((l) => ({ ...l, saleId: saleId! })));
+    await syncAttachments(tx, { saleId }, slipImageIds);
     return saleId;
   });
   revalidateTrade();
