@@ -127,15 +127,24 @@ export async function getHistory(limit = 300) {
   }));
 }
 
-export async function getPublications() {
-  const rows = await db.execute<Record<string, unknown>>(sql`
-    select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.email, u.username) as published_by,
-           (select count(*)::int from publication_pages pp where pp.publication_id = pb.id) as page_count,
-           (select json_agg(pp.image_id order by pp.page_no) from publication_pages pp where pp.publication_id = pb.id) as page_ids
-    from publications pb left join users u on u.id = pb.published_by
-    order by pb.published_at desc, pb.id desc limit 100
-  `);
-  return rows.map((r) => ({
+/** One page of publications, newest first, optionally within Bangkok calendar days `from`..`to`. */
+export async function getPublications(opts: { page?: number; perPage?: number; from?: string | null; to?: string | null } = {}) {
+  const perPage = opts.perPage ?? 100;
+  const page = Math.max(1, opts.page ?? 1);
+  const day = sql`(pb.published_at at time zone 'Asia/Bangkok')::date`;
+  const where = sql`where ${opts.from ? sql`${day} >= ${opts.from}::date` : sql`true`} and ${opts.to ? sql`${day} <= ${opts.to}::date` : sql`true`}`;
+  const [rows, [{ total }]] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      select pb.id, pb.note, pb.change_count, pb.published_at, coalesce(u.display_name, u.email, u.username) as published_by,
+             (select count(*)::int from publication_pages pp where pp.publication_id = pb.id) as page_count,
+             (select json_agg(pp.image_id order by pp.page_no) from publication_pages pp where pp.publication_id = pb.id) as page_ids
+      from publications pb left join users u on u.id = pb.published_by
+      ${where}
+      order by pb.published_at desc, pb.id desc limit ${perPage} offset ${(page - 1) * perPage}
+    `),
+    db.execute<{ total: number }>(sql`select count(*)::int as total from publications pb ${where}`),
+  ]);
+  return { total, items: rows.map((r) => ({
     id: r.id as number,
     note: r.note as string | null,
     changeCount: r.change_count as number,
@@ -143,7 +152,7 @@ export async function getPublications() {
     publishedBy: r.published_by as string | null,
     pageCount: r.page_count as number,
     pageIds: (r.page_ids as string[] | null) ?? [],
-  }));
+  })) };
 }
 
 export async function getPublication(id: number) {
