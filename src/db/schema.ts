@@ -240,6 +240,8 @@ export const saleItems = pgTable(
     // the purchase line (and so the lot) the sale is deducted from, e.g. copper sold out of a bought fridge
     // null = sold from the mixed pile, not from a particular lot
     sourceItemId: integer("source_item_id").references(() => billItems.id, { onDelete: "restrict" }),
+    // the lot the line was sold from; with no source line picked it is deducted from the lot as a whole
+    lotId: integer("lot_id").references(() => bills.id, { onDelete: "set null" }),
     // "ไม่ระบุ LOT": the system found the lots from the item sold (oldest first); see saleAllocations
     autoLot: boolean("auto_lot").notNull().default(false),
     // what was actually sold

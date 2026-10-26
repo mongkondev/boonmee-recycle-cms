@@ -7,6 +7,7 @@ import type { SourceOption } from "./trade-queries";
 
 export type AllocSource = {
   id: number;
+  lotId: number;
   productId: number | null;
   title: string;
   unitName: string | null;
@@ -21,6 +22,8 @@ export type AllocSource = {
 export type AllocLine = {
   /** picked by hand: the whole line goes to this purchase line */
   sourceItemId: number | null;
+  /** sold from this lot without picking one of its lines: deducted from the lot, first lines first */
+  lotId?: number | null;
   /** "ไม่ระบุ LOT": find the lots from the item, oldest first */
   auto: boolean;
   productId: number | null;
@@ -43,6 +46,8 @@ export const sameItem = (s: AllocSource, l: Pick<AllocLine, "productId" | "title
 /**
  * Allocate every line in order. `sources` must be oldest first; it is not modified.
  * - picked line → one allocation, quantity counted only for the same item / unit
+ * - lot without a picked line → the same item in that lot by quantity (as below), otherwise the lot's
+ *   lines in order, each up to its cost left; anything beyond goes on the last line
  * - auto line → spread over the same item in open lots, oldest first, by quantity left; anything beyond
  *   what is left goes on the newest of them. Same name in another unit → the oldest one with cost left.
  *   Not found in any lot → no allocation (sold without a lot).
@@ -65,6 +70,29 @@ export function allocate(lines: AllocLine[], sources: AllocSource[]): Alloc[][] 
       const s = byId.get(line.sourceItemId);
       return [take(line.sourceItemId, s && sameItem(s, line) ? line.qty : null, line.amount)];
     }
+    if (line.lotId) {
+      const inLot = sources.filter((s) => s.lotId === line.lotId);
+      if (!inLot.length) return [];
+      const sameInLot = inLot.filter((s) => sameItem(s, line));
+      if (sameInLot.length) return byQty(sameInLot);
+      const parts: { id: number; amount: number }[] = [];
+      let rest = line.amount;
+      for (const s of inLot) {
+        const a = Math.min(rest, Math.max(0, left.get(s.id)!.cost));
+        if (a > 0) {
+          parts.push({ id: s.id, amount: round(a, 2) });
+          rest = round(rest - a, 2);
+        }
+        if (rest <= 0) break;
+      }
+      if (rest > 0 || !parts.length) {
+        const last = inLot.at(-1)!.id;
+        const p = parts.find((x) => x.id === last);
+        if (p) p.amount = round(p.amount + rest, 2);
+        else parts.push({ id: last, amount: round(rest, 2) });
+      }
+      return parts.map((p) => take(p.id, null, p.amount));
+    }
     if (!line.auto) return [];
 
     const same = sources.filter((s) => s.open && sameItem(s, line));
@@ -73,33 +101,48 @@ export function allocate(lines: AllocLine[], sources: AllocSource[]): Alloc[][] 
       const pick = named.find((s) => left.get(s.id)!.cost > 0) ?? named[0];
       return pick ? [take(pick.id, null, line.amount)] : [];
     }
-    // split by quantity, oldest first
-    const parts: { id: number; qty: number }[] = [];
-    let rest = line.qty;
-    for (const s of same) {
-      const q = Math.min(rest, left.get(s.id)!.qty);
-      if (q > 0) {
-        parts.push({ id: s.id, qty: q });
-        rest = round(rest - q, 3);
+    return byQty(same);
+
+    /** Split by quantity over `same`, in order; whatever is beyond what is left goes on the last one. */
+    function byQty(same: AllocSource[]) {
+      const parts: { id: number; qty: number }[] = [];
+      let rest = line.qty;
+      for (const s of same) {
+        const q = Math.min(rest, left.get(s.id)!.qty);
+        if (q > 0) {
+          parts.push({ id: s.id, qty: q });
+          rest = round(rest - q, 3);
+        }
+        if (rest <= 0) break;
       }
-      if (rest <= 0) break;
+      if (rest > 0) {
+        const last = same.at(-1)!.id;
+        const p = parts.find((x) => x.id === last);
+        if (p) p.qty = round(p.qty + rest, 3);
+        else parts.push({ id: last, qty: rest });
+      }
+      const unitPrice = line.amount / line.qty;
+      let money = line.amount;
+      return parts.map((p, i) => {
+        const amount = i === parts.length - 1 ? round(money, 2) : round(p.qty * unitPrice, 2);
+        money -= amount;
+        return take(p.id, p.qty, amount);
+      });
     }
-    if (rest > 0) {
-      const last = same.at(-1)!.id;
-      const p = parts.find((x) => x.id === last);
-      if (p) p.qty = round(p.qty + rest, 3);
-      else parts.push({ id: last, qty: rest });
-    }
-    const unitPrice = line.amount / line.qty;
-    let money = line.amount;
-    return parts.map((p, i) => {
-      const amount = i === parts.length - 1 ? round(money, 2) : round(p.qty * unitPrice, 2);
-      money -= amount;
-      return take(p.id, p.qty, amount);
-    });
   });
 }
 
 /** Source options (newest first) in the shape the allocator takes, oldest first. */
-export const toAllocSources = (sources: SourceOption[]): AllocSource[] =>
-  sources.toReversed().map((s) => ({ ...s, costLeft: round(s.cost - s.sold, 2), open: true }));
+export function toAllocSources(sources: SourceOption[]): AllocSource[] {
+  // oldest lot first, each lot's lines in bill order
+  const rank = new Map<number, number>();
+  for (const s of sources) if (!rank.has(s.lotId)) rank.set(s.lotId, rank.size);
+  return sources
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => rank.get(b.s.lotId)! - rank.get(a.s.lotId)! || a.i - b.i)
+    .map(({ s }) => ({
+      ...s,
+      costLeft: round(s.cost - s.sold, 2),
+      open: true,
+    }));
+}

@@ -7,7 +7,7 @@ import { PriceInput } from "@/components/price-input";
 import { Button, Card, cn, FormError, Input, Label, PageHeader } from "@/components/ui";
 import { saveBill } from "@/lib/bill-actions";
 import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtBillNo, fmtMoney, fmtQty, fmtSaleNo } from "@/lib/bill";
-import { allocate, toAllocSources } from "@/lib/allocate";
+import { allocate, sameItem, toAllocSources } from "@/lib/allocate";
 import { saveSale } from "@/lib/trade-actions";
 import type { Customer, SourceOption } from "@/lib/trade-queries";
 import { fmtPrice } from "@/lib/trend";
@@ -197,9 +197,10 @@ export function TradeForm({
       key: `s${s.id}`,
       productId: s.productId,
       title: s.title,
-      group: `${s.lotNo} · ซื้อ ${fmtQty(s.qty)} เหลือ ${fmtQty(s.qtyLeft)} ${s.unitName ?? ""} · ทุนเหลือ ${fmtMoney(s.remaining)}`,
+      group: `${s.lotNo} · ซื้อ ${fmtQty(s.qty)} ${s.unitName ?? ""}${s.qty ? ` · ทุน/หน่วย ${fmtMoney(s.cost / s.qty)}` : ""}`,
       unitName: s.unitName,
-      price: null,
+      // last selling price of the same catalogue item, if it was sold before
+      price: (s.productId !== null ? products.find((p) => p.productId === s.productId)?.price : null) ?? null,
       sourceId: s.id,
     });
     const all = sources.map(opt);
@@ -227,6 +228,7 @@ export function TradeForm({
     ? allocate(
         rows.map((r) => ({
           sourceItemId: r.lotId || r.noLot ? r.sourceItemId : null,
+          lotId: r.lotId ?? null,
           auto: !!r.noLot && !!r.auto && !r.sourceItemId,
           productId: r.productId,
           title: r.title,
@@ -244,6 +246,27 @@ export function TradeForm({
     if (a.qty !== null) qtyBySource.set(a.sourceId, (qtyBySource.get(a.sourceId) ?? 0) + a.qty);
   }
   const [closeLots, setCloseLots] = useState<number[]>([]);
+
+  /** Selling: how much of an item is still there to sell (open lots, minus what this form already sells). */
+  const available = (o: Pick<TradeOption, "sourceId" | "productId" | "title" | "unitName">, exceptRow?: Row) => {
+    const own = (id: number) => (exceptRow && plan[rows.indexOf(exceptRow)]?.find((a) => a.sourceId === id)?.qty) || 0;
+    const left = (s: { id: number; qtyLeft: number }) => s.qtyLeft - (qtyBySource.get(s.id) ?? 0) + own(s.id);
+    if (o.sourceId) {
+      const s = sourceById.get(o.sourceId);
+      return s ? { qty: Math.round(left(s) * 1000) / 1000, unit: s.unitName } : null;
+    }
+    // a lot's row only counts that lot
+    const same = allocSources.filter(
+      (s) => (!exceptRow?.lotId || s.lotId === exceptRow.lotId) && sameItem(s, { productId: o.productId, title: o.title, unitName: o.unitName }),
+    );
+    return same.length ? { qty: Math.round(same.reduce((t, s) => t + left(s), 0) * 1000) / 1000, unit: same[0].unitName } : null;
+  };
+  const availBadge = (a: { qty: number; unit: string | null } | null) =>
+    a && (
+      <span className={cn("rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums", a.qty > 0 ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-slate-500")}>
+        {a.qty > 0 ? `มีให้ขาย ${fmtQty(a.qty)} ${a.unit ?? ""}` : "หมดแล้ว"}
+      </span>
+    );
 
   const patch = (key: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
@@ -327,7 +350,6 @@ export function TradeForm({
     for (const r of used) {
       const n = rows.indexOf(r) + 1;
       if (selling && !r.lotId && !r.noLot) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT ไหน หรือ "ไม่ระบุ LOT"`);
-      if (selling && r.lotId && !r.sourceItemId) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจากของชิ้นไหนใน LOT (หักทุนจาก)`);
       if (!r.title.trim()) return setError(`แถวที่ ${n}: กรุณากรอกชื่อรายการ`);
       if (!(num(r.qty) > 0)) return setError(`แถวที่ ${n}: กรุณากรอกจำนวน`);
       if (!Number.isFinite(num(r.unitPrice))) return setError(`แถวที่ ${n}: กรุณากรอก${text.price}`);
@@ -348,7 +370,7 @@ export function TradeForm({
           billImageIds: billImages,
           saleDate: head.date,
           closeLotIds: closeLots.filter((id) => rows.some((r) => r.lotId === id)),
-          items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId, auto: !!r.noLot && !!r.auto && !r.sourceItemId })),
+          items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId, lotId: r.lotId ?? null, auto: !!r.noLot && !!r.auto && !r.sourceItemId })),
         })
       : await saveBill({
           ...common,
@@ -378,8 +400,11 @@ export function TradeForm({
           onType={(title) => patch(r.key, { title, productId: null })}
           onPick={(o) => pickItem(r, o)}
           right={(o) =>
-            o.sourceId ? (
-              <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">ของใน LOT</span>
+            selling && (o.sourceId || available(o, r)) ? (
+              <span className="flex flex-col items-end gap-0.5">
+                {availBadge(available(o, r))}
+                {o.price !== null && <span className="text-xs text-slate-500 tabular-nums">ขายล่าสุด {fmtPrice(o.price)}</span>}
+              </span>
             ) : o.price !== null && (
               <span className="text-sm font-semibold text-brand-700 tabular-nums">
                 {fmtPrice(o.price)}
@@ -444,7 +469,8 @@ export function TradeForm({
     const parts = plan[i] ?? [];
     const opt = (s: SourceOption) => (
       <option key={s.id} value={s.id}>
-        {s.title} · เหลือ {fmtQty(s.qtyLeft)} {s.unitName ?? ""} · ทุนเหลือ {fmtMoney(s.remaining)}
+        {s.title} · มีให้ขาย {fmtQty(Math.max(0, available({ sourceId: s.id, productId: null, title: "", unitName: null }, r)?.qty ?? 0))} {s.unitName ?? ""} · ทุนเหลือ{" "}
+        {fmtMoney(s.remaining)}
       </option>
     );
     const auto = !!r.noLot && !!r.auto && !src;
@@ -457,12 +483,12 @@ export function TradeForm({
           aria-label={`หักทุนจาก แถวที่ ${i + 1}`}
           className={cn(
             "h-8 max-w-full min-w-0 flex-1 rounded-lg border bg-white px-1.5 text-xs outline-none focus:border-brand-500 sm:max-w-md sm:flex-none",
-            src || auto ? "border-brand-200 font-medium text-ink-900" : lot ? "border-amber-300 text-amber-700" : "border-slate-200 text-slate-500",
+            src || auto || lot ? "border-brand-200 font-medium text-ink-900" : "border-slate-200 text-slate-500",
           )}
         >
           {lot ? (
             <>
-              <option value="">— เลือกของใน LOT นี้ —</option>
+              <option value="">ทั้ง LOT — ระบบหักให้เอง (FIFO)</option>
               {lot.items.map(opt)}
             </>
           ) : (
@@ -477,6 +503,9 @@ export function TradeForm({
             </>
           )}
         </select>
+        {r.title.trim() &&
+          !amountOf(r) &&
+          availBadge(available({ sourceId: r.sourceItemId ?? undefined, productId: r.productId, title: r.title, unitName: r.unitName.trim() || null }, r))}
         {r.title.trim() && amountOf(r) > 0 && (
           <span className="basis-full text-slate-500 sm:basis-auto">
             {parts.length === 0 ? (
@@ -491,7 +520,12 @@ export function TradeForm({
                 return (
                   <span key={p.sourceId} className="block sm:inline">
                     {k > 0 && <span className="hidden sm:inline"> · </span>}
-                    {(r.noLot || parts.length > 1) && <span className="font-medium text-slate-600 tabular-nums">{s.lotNo} </span>}
+                    {r.noLot ? (
+                      <span className="font-medium text-slate-600 tabular-nums">{s.lotNo} </span>
+                    ) : (
+                      !src && <span className="font-medium text-slate-600">{s.title} </span>
+                    )}
+                    {!r.noLot && !src && p.qty === null && <span className="tabular-nums">−{fmtMoney(p.amount)} · </span>}
                     {p.qty !== null && (
                       <span className="tabular-nums">
                         {fmtQty(p.qty)} {s.unitName} ({qtyAfter < 0 ? `เกินที่ซื้อ ${fmtQty(-qtyAfter)}` : `เหลือ ${fmtQty(qtyAfter)}`}) ·{" "}

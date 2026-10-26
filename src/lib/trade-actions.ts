@@ -36,6 +36,8 @@ const saleItemSchema = z.object({
   // picked purchase line; null = found automatically (auto) or sold without a lot
   sourceItemId: z.number().int().nullable(),
   auto: z.boolean().default(false),
+  // sold from this lot; with no line picked it is deducted from the lot, first lines first
+  lotId: z.number().int().nullable().default(null),
   productId: z.number().int().nullable(),
   title: z.string().trim().min(1, "กรุณากรอกรายการที่ขาย").max(200),
   unitName: z.string().trim().max(40).nullable(),
@@ -68,7 +70,7 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
   const lines = items.map(({ auto, ...it }, i) => {
     const qty = round(it.qty, 3);
     const unitPrice = round(it.unitPrice, 2);
-    return { ...it, autoLot: !it.sourceItemId && auto, unitName: it.unitName || null, qty, unitPrice, amount: round(qty * unitPrice, 2), lineNo: i + 1 };
+    return { ...it, autoLot: !it.sourceItemId && !it.lotId && auto, unitName: it.unitName || null, qty, unitPrice, amount: round(qty * unitPrice, 2), lineNo: i + 1 };
   });
   const sourceIds = [...new Set(lines.flatMap((l) => (l.sourceItemId ? [l.sourceItemId] : [])))];
   const found = sourceIds.length
@@ -103,7 +105,10 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
       .values(lines.map((l) => ({ ...l, saleId: saleId! })))
       .returning({ id: schema.saleItems.id });
     // deduct each line from its lots; automatic lines are split over the same item, oldest lot first
-    const plan = allocate(lines.map((l) => ({ ...l, auto: l.autoLot })), sources);
+    const plan = allocate(
+      lines.map((l) => ({ ...l, auto: l.autoLot })),
+      sources,
+    );
     const allocs = plan.flatMap((parts, i) => parts.map((p) => ({ saleItemId: inserted[i].id, billItemId: p.sourceId, qty: p.qty, amount: p.amount })));
     if (allocs.length) await tx.insert(schema.saleAllocations).values(allocs);
     if (closeLotIds.length) {

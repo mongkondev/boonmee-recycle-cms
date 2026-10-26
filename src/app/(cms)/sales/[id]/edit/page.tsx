@@ -40,7 +40,8 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
           bills: slips.filter((s) => s.kind === "bill").map((s) => s.imageId),
           rows: sale.items.map((i) => ({
             sourceItemId: i.sourceItemId,
-            noLot: i.sourceItemId === null,
+            lotId: i.lotId,
+            noLot: i.lotId === null && i.sourceItemId === null,
             auto: i.autoLot,
             productId: i.productId,
             title: i.title,

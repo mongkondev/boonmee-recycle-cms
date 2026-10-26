@@ -99,6 +99,13 @@
       "when": 1793028131922,
       "tag": "0013_sale_allocations",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793030156460,
+      "tag": "0014_sale_item_lot",
+      "breakpoints": true
     }
   ]
 }
