@@ -1,16 +1,24 @@
+import { TradeForm } from "@/components/trade-form";
 import { PageHeader } from "@/components/ui";
 import { bangkokToday } from "@/lib/bill";
-import { getBillProducts } from "@/lib/queries";
-import { TradeForm } from "@/components/trade-form";
+import { emptyParty } from "@/lib/party";
+import { getBillProducts, getUnits } from "@/lib/queries";
+import { getCustomers } from "@/lib/trade-queries";
 
-export const metadata = { title: "สร้างบิลรับซื้อ" };
+export const metadata = { title: "รับซื้อเข้า" };
 
 export default async function NewBillPage() {
-  const products = await getBillProducts();
+  const [products, customers, units] = await Promise.all([getBillProducts(), getCustomers(), getUnits()]);
   return (
     <>
-      <PageHeader title="รับซื้อเข้า / ออกบิล" description="เลือกรายการ ระบบใส่ราคาล่าสุดให้อัตโนมัติ แก้ไขราคาได้ · ยังไม่ออกบิลก็บันทึกไว้ก่อนได้" />
-      <TradeForm mode="buy" options={products} initial={{ party: "", date: bangkokToday(), paymentMethod: "cash", note: "", rows: [] }} />
+      <PageHeader title="รับซื้อเข้า / ออกบิล" description="ทุกการรับซื้อได้เลข LOT อัตโนมัติ · ราคาดึงจากราคาล่าสุด แก้ไขได้ · ยังไม่ออกบิลก็บันทึกไว้ก่อนได้" />
+      <TradeForm
+        mode="buy"
+        products={products}
+        customers={customers}
+        units={units.map((u) => u.name)}
+        initial={{ party: emptyParty(), date: bangkokToday(), paymentMethod: "cash", note: "", rows: [] }}
+      />
     </>
   );
 }

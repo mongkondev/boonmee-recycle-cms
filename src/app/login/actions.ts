@@ -106,7 +106,7 @@ export async function verifyAction(_: FormState, form: FormData): Promise<FormSt
   }
   await resetFailures(user);
   await setSession({ uid: user.id, stage: "full" });
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function setupAction(_: FormState, form: FormData): Promise<FormState> {
@@ -117,7 +117,7 @@ export async function setupAction(_: FormState, form: FormData): Promise<FormSta
     .set({ totpEnabled: true, failedAttempts: 0, lockedUntil: null })
     .where(eq(schema.users.id, user.id));
   await setSession({ uid: user.id, stage: "full" });
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function logoutAction() {

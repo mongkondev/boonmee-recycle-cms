@@ -28,7 +28,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
           <input
             name="q"
             defaultValue={q}
-            placeholder="ค้นหาเลขที่บิล ชื่อลูกค้า หรือรายการ"
+            placeholder="ค้นหาเลขที่บิล เลข LOT ชื่อลูกค้า หรือรายการ"
             className="h-10 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-sm shadow-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
           />
         </div>
@@ -67,7 +67,7 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
                   <Link href={`/bills/${b.id}`} className="block">
                     <span className="font-medium text-slate-800">{b.customerName ?? "—"}</span>
                     <span className="block text-xs text-slate-400">
-                      {b.itemCount} รายการ<span className="md:hidden"> · {fmtDate(b.billDate)}</span>
+                      {b.lotNo} · {b.itemCount} รายการ<span className="md:hidden"> · {fmtDate(b.billDate)}</span>
                     </span>
                   </Link>
                 </td>

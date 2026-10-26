@@ -2,8 +2,7 @@
 
 import { Phone } from "lucide-react";
 import { forwardRef } from "react";
-import { A5, BILL_MIN_ROWS, bahtText, fmtBillNo, fmtMoney, fmtQty } from "@/lib/bill";
-import type { BillDetail } from "@/lib/queries";
+import { A5, BILL_MIN_ROWS, bahtText, fmtMoney, fmtQty } from "@/lib/bill";
 import type { ShopSettings } from "@/lib/types";
 import { RecycleMark } from "./recycle-mark";
 
@@ -12,13 +11,34 @@ const GREEN = "#3a9e1d";
 // table area left after header, totals and signatures (px at A5 scale)
 const TABLE_BODY_H = 790;
 
-/** One A5 (874×1240) cash bill. Fixed px sizes only: theme text classes are scaled for the CMS. */
-export const BillA5 = forwardRef<HTMLDivElement, { bill: BillDetail; settings: ShopSettings }>(function BillA5({ bill, settings }, ref) {
+/** What an A5 document prints: a purchase bill (buy) or a sales slip (sell). */
+export type TradeDoc = {
+  kind: "buy" | "sell";
+  no: string | null;
+  lotNo?: string;
+  party: string | null;
+  date: string;
+  paymentMethod: "cash" | "transfer";
+  total: number;
+  note: string | null;
+  /** printed next to the payment when paid by transfer */
+  bankLine?: string | null;
+  items: { title: string; unitName: string | null; qty: number; unitPrice: number; amount: number }[];
+};
+
+const LABELS = {
+  buy: { badge: "บิลเงินสด", sub: "ใบรับซื้อสินค้า", party: "ชื่อลูกค้า", pay: "การจ่าย", signs: ["ผู้ขาย (ลูกค้า)", "ผู้รับซื้อ"] },
+  sell: { badge: "ใบขายสินค้า", sub: "ใบส่งของ / รับเงิน", party: "ผู้ซื้อ", pay: "รับเงิน", signs: ["ผู้ซื้อ / ผู้รับของ", "ผู้ขาย"] },
+};
+
+/** One A5 (874×1240) document. Fixed px sizes only: theme text classes are scaled for the CMS. */
+export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: ShopSettings }>(function TradeDocA5({ doc: bill, settings }, ref) {
+  const L = LABELS[bill.kind];
   const phones = settings.phones.split(",").map((s) => s.trim()).filter(Boolean);
   const rows = Math.max(BILL_MIN_ROWS, bill.items.length);
   const rowH = Math.min(79, TABLE_BODY_H / rows);
   const font = Math.max(13, Math.min(19, rowH * 0.4));
-  const date = new Date(bill.billDate).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
+  const date = new Date(bill.date).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
   const cell = { height: rowH, fontSize: font, borderBottom: "1px solid #dfe6da" } as const;
 
   return (
@@ -45,21 +65,21 @@ export const BillA5 = forwardRef<HTMLDivElement, { bill: BillDetail; settings: S
           )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="rounded-[14px] px-4 py-1.5 text-[22px] font-bold text-white" style={{ background: "#003020" }}>บิลเงินสด</div>
-          <div className="mt-1 text-[14px] text-[#4b5d52]">ใบรับซื้อสินค้า</div>
+          <div className="rounded-[14px] px-4 py-1.5 text-[22px] font-bold text-white" style={{ background: "#003020" }}>{L.badge}</div>
+          <div className="mt-1 text-[14px] text-[#4b5d52]">{L.sub}</div>
         </div>
       </header>
 
       <div className="relative mt-5 grid grid-cols-[1fr_auto] gap-x-6 gap-y-1.5 rounded-[14px] bg-[#f3f7ef] px-5 py-3 text-[17px]">
         <div className="flex min-w-0 gap-2">
-          <span className="shrink-0 text-[#4b5d52]">ชื่อลูกค้า</span>
-          <span className="min-w-0 flex-1 truncate border-b border-dotted border-[#9fb39a] font-medium">{bill.customerName ?? ""}</span>
+          <span className="shrink-0 text-[#4b5d52]">{L.party}</span>
+          <span className="min-w-0 flex-1 truncate border-b border-dotted border-[#9fb39a] font-medium">{bill.party ?? ""}</span>
         </div>
         <div className="flex gap-2">
           <span className="text-[#4b5d52]">เลขที่</span>
-          <span className="font-semibold tabular-nums">{bill.billNo ? fmtBillNo(bill.billNo) : "—"}</span>
+          <span className="font-semibold tabular-nums">{bill.no ?? "—"}</span>
         </div>
-        <div />
+        <div className="text-[14px] text-[#4b5d52]">{bill.lotNo && <>LOT <span className="tabular-nums">{bill.lotNo}</span></>}</div>
         <div className="flex gap-2">
           <span className="text-[#4b5d52]">วันที่</span>
           <span className="font-medium">{date}</span>
@@ -117,7 +137,7 @@ export const BillA5 = forwardRef<HTMLDivElement, { bill: BillDetail; settings: S
       </div>
 
       <div className="relative mt-3 flex items-center gap-6 text-[17px]">
-        <span className="font-semibold">การจ่าย</span>
+        <span className="font-semibold">{L.pay}</span>
         {(["cash", "transfer"] as const).map((m) => (
           <span key={m} className="flex items-center gap-2">
             <span
@@ -129,12 +149,13 @@ export const BillA5 = forwardRef<HTMLDivElement, { bill: BillDetail; settings: S
             {m === "cash" ? "เงินสด" : "โอน"}
           </span>
         ))}
+        {bill.paymentMethod === "transfer" && bill.bankLine && <span className="text-[15px] font-medium">{bill.bankLine}</span>}
         {bill.note && <span className="min-w-0 flex-1 truncate text-right text-[15px] text-[#4b5d52]">หมายเหตุ: {bill.note}</span>}
       </div>
 
       {/* signatures */}
       <div className="relative mt-auto grid grid-cols-2 gap-10 px-4 text-center text-[15px] text-[#4b5d52]">
-        {["ผู้ขาย (ลูกค้า)", "ผู้รับซื้อ"].map((who) => (
+        {L.signs.map((who) => (
           <div key={who}>
             <div className="mx-auto mb-1.5 h-[36px] w-[230px] border-b border-dotted border-[#7d917a]" />
             {who}

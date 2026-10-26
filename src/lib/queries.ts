@@ -202,17 +202,19 @@ export async function getBills(search = "", limit = 200) {
   const q = search.trim();
   const like = `%${q}%`;
   const rows = await db.execute<Record<string, unknown>>(sql`
-    select b.id, b.bill_no, b.customer_name, b.bill_date, b.payment_method, b.total,
+    select b.id, b.bill_no, b.lot_no, b.lot_note, b.customer_name, b.bill_date, b.payment_method, b.total,
            (select count(*)::int from bill_items i where i.bill_id = b.id) as item_count,
            coalesce(u.display_name, u.email, u.username) as created_by
     from bills b left join users u on u.id = b.created_by
-    ${q ? sql`where b.customer_name ilike ${like} or b.bill_no::text = ${q.replace(/^#?0*/, "")}
+    ${q ? sql`where b.customer_name ilike ${like} or b.lot_no ilike ${like} or b.lot_note ilike ${like} or b.bill_no::text = ${q.replace(/^#?0*/, "")}
       or exists (select 1 from bill_items i where i.bill_id = b.id and i.title ilike ${like})` : sql``}
     order by b.bill_date desc, b.id desc limit ${limit}
   `);
   return rows.map((r) => ({
     id: r.id as number,
     billNo: r.bill_no as number | null,
+    lotNo: r.lot_no as string,
+    lotNote: r.lot_note as string | null,
     customerName: r.customer_name as string | null,
     billDate: new Date(r.bill_date as string).toISOString(),
     paymentMethod: r.payment_method as "cash" | "transfer",
@@ -230,15 +232,21 @@ export async function getBill(id: number) {
     .from(schema.billItems)
     .where(eq(schema.billItems.billId, id))
     .orderBy(asc(schema.billItems.lineNo));
+  const customer = bill.customerId ? await db.query.customers.findFirst({ where: eq(schema.customers.id, bill.customerId) }) : null;
   return {
     id: bill.id,
     billNo: bill.billNo,
+    lotNo: bill.lotNo,
+    lotNote: bill.lotNote,
+    lotClosed: bill.lotClosedAt !== null,
     customerName: bill.customerName,
+    customer: customer ? { phone: customer.phone, bankName: customer.bankName, bankAccount: customer.bankAccount } : null,
     billDate: bill.billDate.toISOString(),
     paymentMethod: bill.paymentMethod,
     total: bill.total,
     note: bill.note,
     items: items.map((i) => ({
+      id: i.id,
       productId: i.productId,
       title: i.title,
       unitName: i.unitName,
@@ -262,6 +270,7 @@ export async function getBillProducts() {
       title: p.title,
       group: p.subName ? `${p.mainName} › ${p.subName}` : p.mainName,
       unitName: p.unitName,
-      price: p.price,
+      // the newest price: a draft waiting for publish wins over the published one
+      price: ((p.draftPrice ?? p.price) || null) as number | null,
     }));
 }

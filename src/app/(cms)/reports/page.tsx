@@ -87,8 +87,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="ซื้อเข้า" value={totals.buyAmount} sub={`${totals.buyCount} รายการ · เงินสด ${fmtMoney(totals.buyCash)}`} />
         <Stat label="ขายออก / รายรับ" value={totals.sellAmount} sub={`${totals.sellCount} รายการ`} />
-        <Stat label="กำไรขั้นต้น (ประมาณ)" value={totals.profit} sub="ยอดขาย − ทุนเฉลี่ยของที่ขาย" tone={totals.profit < 0 ? "bad" : "good"} />
-        <Stat label="เงินสุทธิ (ขาย − ซื้อ)" value={totals.sellAmount - totals.buyAmount} sub="กระแสเงินในช่วงนี้" />
+        <Stat label="จ่ายโอน (ซื้อเข้า)" value={totals.buyAmount - totals.buyCash} sub="ส่วนที่ไม่ใช่เงินสด" />
+        <Stat label="เงินสุทธิ (ขาย − ซื้อ)" value={totals.sellAmount - totals.buyAmount} sub="กระแสเงินในช่วงนี้" tone={totals.sellAmount - totals.buyAmount < 0 ? "bad" : undefined} />
       </div>
 
       {days <= 62 && (
@@ -173,7 +173,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone?: "good" | "bad" }) {
+function Stat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone?: "bad" }) {
   return (
     <Card className="p-4">
       <div className="text-sm text-slate-500">{label}</div>

@@ -1,17 +1,17 @@
 "use client";
 
-import { Banknote, FileCheck2, Landmark, LoaderCircle, Plus, Save, Search, Trash2 } from "lucide-react";
+import { Banknote, FileCheck2, Landmark, LoaderCircle, Package, Plus, Save, Search, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useMemo, useRef, useState } from "react";
 import { PriceInput } from "@/components/price-input";
 import { Button, Card, cn, FormError, Input, Label } from "@/components/ui";
 import { saveBill } from "@/lib/bill-actions";
 import { BILL_MAX_ROWS, BILL_MIN_ROWS, fmtMoney, fmtQty } from "@/lib/bill";
-import { stockKey } from "@/lib/stock-key";
 import { saveSale } from "@/lib/trade-actions";
+import type { Customer, SourceOption } from "@/lib/trade-queries";
 import { fmtPrice } from "@/lib/trend";
 
-/** A pickable line: a catalogue product (buying) or a stock item (selling). */
+/** A catalogue item that can be put on a line. */
 export type TradeOption = {
   key: string;
   productId: number | null;
@@ -20,48 +20,94 @@ export type TradeOption = {
   unitName: string | null;
   /** price filled in when picked */
   price: number | null;
-  /** selling only: how much is left in stock */
-  remaining?: number;
-  avgCost?: number;
 };
 
-type Row = { key: number; productId: number | null; title: string; unitName: string; qty: string; unitPrice: string };
+type Row = {
+  key: number;
+  /** buying: the existing purchase line being edited */
+  itemId?: number;
+  /** selling: the purchase line (lot) this sale is deducted from */
+  sourceItemId: number | null;
+  productId: number | null;
+  title: string;
+  unitName: string;
+  qty: string;
+  unitPrice: string;
+};
+
+export type Party = { name: string; phone: string; bankName: string; bankAccount: string };
 
 export type TradeFormValues = {
   id?: number;
-  party: string;
+  party: Party;
   date: string;
   paymentMethod: "cash" | "transfer";
   note: string;
   /** buying only: the purchase already has a bill number */
   hasBillNo?: boolean;
+  /** buying only: lot number of an existing purchase, and the internal lot note */
+  lotNo?: string;
+  lotNote?: string;
   rows: Omit<Row, "key">[];
 };
 
 const TEXT = {
-  buy: { party: "ชื่อลูกค้า (ผู้ขายของให้ร้าน)", price: "ราคา/หน่วย", search: "ค้นหาหรือพิมพ์รายการ" },
-  sell: { party: "ผู้ซื้อ / โรงงาน", price: "ราคาขาย/หน่วย", search: "ค้นหาจากสต็อก" },
+  buy: { party: "ชื่อลูกค้า (ผู้ขายของให้ร้าน)", price: "ราคา/หน่วย" },
+  sell: { party: "ผู้ซื้อ / โรงงาน", price: "ราคาขาย/หน่วย" },
 };
 
 let nextKey = 0;
-const blankRow = (): Row => ({ key: nextKey++, productId: null, title: "", unitName: "", qty: "", unitPrice: "" });
+const blankRow = (sourceItemId: number | null = null): Row => ({
+  key: nextKey++,
+  sourceItemId,
+  productId: null,
+  title: "",
+  unitName: "",
+  qty: "",
+  unitPrice: "",
+});
 const num = (s: string) => (s === "" || s === "." ? NaN : Number(s));
 const amountOf = (r: Row) => {
   const v = num(r.qty) * num(r.unitPrice);
   return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
 };
-const rowKey = (r: Row) => stockKey(r.productId, r.title, r.unitName.trim() || null);
+const inputCls = "h-10 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15";
 
 /** Line-item form shared by รับซื้อเข้า (bills) and ขายออก (sales). */
-export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; options: TradeOption[]; initial: TradeFormValues }) {
+export function TradeForm({
+  mode,
+  products,
+  sources = [],
+  customers,
+  units,
+  initial,
+}: {
+  mode: "buy" | "sell";
+  products: TradeOption[];
+  /** unit names offered in the unit dropdown */
+  units: string[];
+  sources?: SourceOption[];
+  customers: Customer[];
+  initial: TradeFormValues;
+}) {
   const router = useRouter();
   const text = TEXT[mode];
   const selling = mode === "sell";
-  const [head, setHead] = useState({ party: initial.party, date: initial.date, paymentMethod: initial.paymentMethod, note: initial.note });
+  const [head, setHead] = useState({
+    date: initial.date,
+    paymentMethod: initial.paymentMethod,
+    note: initial.note,
+    lotNote: initial.lotNote ?? "",
+  });
+  const [party, setParty] = useState<Party>(initial.party);
+  // a purchase bill prints like a 10-line paper pad; sales lines carry a lot picker each, so start with fewer
+  const minRows = selling ? 3 : BILL_MIN_ROWS;
   const [rows, setRows] = useState<Row[]>(() => {
     const filled = initial.rows.map((r) => ({ ...r, key: nextKey++ }));
-    return [...filled, ...Array.from({ length: Math.max(0, BILL_MIN_ROWS - filled.length) }, blankRow)];
+    return [...filled, ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow())];
   });
+  // selling: new lines default to the lot line picked last
+  const [lastSource, setLastSource] = useState<number | null>(initial.rows.at(-1)?.sourceItemId ?? null);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState<string | null>(null);
   const inputs = useRef(new Map<string, HTMLInputElement>());
@@ -70,19 +116,40 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
     else inputs.current.delete(`${key}:${field}`);
   };
   const focus = (key: number, field: string) => setTimeout(() => inputs.current.get(`${key}:${field}`)?.focus(), 0);
-  const byKey = useMemo(() => new Map(options.map((o) => [o.key, o])), [options]);
+
+  const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
+  const sourceOptions = useMemo(
+    () =>
+      sources.map((s) => ({
+        key: String(s.id),
+        title: `${s.title}${s.qty ? ` ${fmtQty(s.qty)} ${s.unitName ?? ""}` : ""}`,
+        group: [s.lotNo, s.lotNote, s.customerName].filter(Boolean).join(" · "),
+        source: s,
+      })),
+    [sources],
+  );
+  const customerOptions = useMemo(
+    () =>
+      customers.map((c) => ({
+        key: String(c.id),
+        title: c.name,
+        group: [c.phone, c.bankName && `${c.bankName} ${c.bankAccount ?? ""}`].filter(Boolean).join(" · ") || "ลูกค้าเดิม",
+        customer: c,
+      })),
+    [customers],
+  );
 
   const total = rows.reduce((s, r) => s + amountOf(r), 0);
   const filledCount = rows.filter((r) => r.title.trim()).length;
-  // selling: quantity already put on other rows of this form, per stock item
-  const usedQty = new Map<string, number>();
-  for (const r of rows) if (r.title && num(r.qty) > 0) usedQty.set(rowKey(r), (usedQty.get(rowKey(r)) ?? 0) + num(r.qty));
+  // selling: money put against each purchase line by this form
+  const usedBySource = new Map<number, number>();
+  for (const r of rows) if (r.sourceItemId) usedBySource.set(r.sourceItemId, (usedBySource.get(r.sourceItemId) ?? 0) + amountOf(r));
 
   const patch = (key: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
 
   const addRow = () => {
     if (rows.length >= BILL_MAX_ROWS) return;
-    const r = blankRow();
+    const r = blankRow(selling ? lastSource : null);
     setRows((rs) => [...rs, r]);
     focus(r.key, "title");
   };
@@ -94,15 +161,28 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
     else addRow();
   };
 
-  const pick = (key: number, o: TradeOption) => {
-    patch(key, { productId: o.productId, title: o.title, unitName: o.unitName ?? "", unitPrice: o.price === null ? "" : String(o.price) });
-    focus(key, "qty");
+  const pickItem = (row: Row, o: TradeOption) => {
+    patch(row.key, {
+      productId: o.productId,
+      title: o.title,
+      unitName: o.unitName ?? "",
+      unitPrice: o.price === null ? row.unitPrice : String(o.price),
+      ...(selling && !row.sourceItemId && lastSource && { sourceItemId: lastSource }),
+    });
+    focus(row.key, "qty");
+  };
+
+  const pickSource = (row: Row, s: SourceOption) => {
+    setLastSource(s.id);
+    // selling the purchased item as it is: start from the same item, it can be changed to the part sold
+    patch(row.key, { sourceItemId: s.id, ...(!row.title && { title: s.title, unitName: s.unitName ?? "" }) });
+    focus(row.key, "title");
   };
 
   const removeRow = (key: number) =>
     setRows((rs) => {
       const left = rs.filter((r) => r.key !== key);
-      return left.length >= BILL_MIN_ROWS ? left : [...left, blankRow()];
+      return left.length >= minRows ? left : [...left, blankRow()];
     });
 
   async function submit(issueBill: boolean) {
@@ -110,77 +190,164 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
     const used = rows.filter((r) => r.title.trim() || r.qty || r.unitPrice);
     for (const r of used) {
       const n = rows.indexOf(r) + 1;
+      if (selling && !r.sourceItemId) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT / รายการซื้อไหน`);
       if (!r.title.trim()) return setError(`แถวที่ ${n}: กรุณากรอกชื่อรายการ`);
-      if (selling && !byKey.has(rowKey(r))) return setError(`แถวที่ ${n}: กรุณาเลือกรายการจากสต็อก`);
       if (!(num(r.qty) > 0)) return setError(`แถวที่ ${n}: กรุณากรอกจำนวน`);
       if (!Number.isFinite(num(r.unitPrice))) return setError(`แถวที่ ${n}: กรุณากรอก${text.price}`);
     }
     if (!used.length) return setError("กรุณาเพิ่มอย่างน้อย 1 รายการ");
-    if (selling) {
-      for (const [k, q] of usedQty) {
-        const o = byKey.get(k);
-        if (o && q > (o.remaining ?? 0) + 1e-9) return setError(`"${o.title}" เหลือขายได้ ${fmtQty(o.remaining ?? 0)} ${o.unitName ?? ""}`);
-      }
-    }
     setSaving(issueBill ? "bill" : "save");
-    const items = used.map((r) => ({
+    const line = (r: Row) => ({
       productId: r.productId,
       title: r.title,
       unitName: r.unitName.trim() || null,
       qty: num(r.qty),
       unitPrice: num(r.unitPrice),
-    }));
-    const common = { id: initial.id, paymentMethod: head.paymentMethod, note: head.note, items };
+    });
+    const common = { id: initial.id, party, paymentMethod: head.paymentMethod, note: head.note };
     const res = selling
-      ? await saveSale({ ...common, buyerName: head.party, saleDate: head.date })
-      : await saveBill({ ...common, customerName: head.party, billDate: head.date, issueBill });
+      ? await saveSale({ ...common, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId! })) })
+      : await saveBill({
+          ...common,
+          billDate: head.date,
+          lotNote: head.lotNote,
+          issueBill,
+          items: used.map((r) => ({ ...line(r), id: r.itemId })),
+        });
     if (!res.ok) {
       setSaving(null);
       return setError(res.error);
     }
-    router.push(selling ? `/sales?saved=${res.data!.id}` : `/bills/${res.data!.id}?fresh=1`);
+    router.push(`/${selling ? "sales" : "bills"}/${res.data!.id}?fresh=1`);
   }
 
   return (
     <div className="space-y-4">
-      <Card className="grid gap-4 p-4 sm:grid-cols-[1fr_12rem] sm:p-5">
-        <div>
+      <Card className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-[1fr_12rem_12rem]">
+        <div className="sm:col-span-2 lg:col-span-1">
           <Label htmlFor="party">{text.party}</Label>
-          <Input id="party" value={head.party} maxLength={120} placeholder="ไม่บังคับ" onChange={(e) => setHead({ ...head, party: e.target.value })} />
+          <ItemPicker
+            id="party"
+            icon={UserRound}
+            value={party.name}
+            linked={customers.some((c) => c.name === party.name.trim())}
+            options={customerOptions}
+            placeholder="พิมพ์ชื่อ หรือเลือกลูกค้าเดิม (ไม่บังคับ)"
+            emptyText="ชื่อใหม่ — บันทึกเป็นลูกค้าใหม่ให้อัตโนมัติ"
+            keepQuery
+            onType={(name) => setParty({ ...party, name })}
+            onPick={(o) =>
+              setParty({ name: o.customer.name, phone: o.customer.phone ?? "", bankName: o.customer.bankName ?? "", bankAccount: o.customer.bankAccount ?? "" })
+            }
+          />
+        </div>
+        <div>
+          <Label htmlFor="phone">เบอร์โทร</Label>
+          <Input id="phone" type="tel" value={party.phone} maxLength={40} placeholder="ไม่บังคับ" onChange={(e) => setParty({ ...party, phone: e.target.value })} />
         </div>
         <div>
           <Label htmlFor="date" required>วันที่</Label>
           <Input id="date" type="date" value={head.date} onChange={(e) => setHead({ ...head, date: e.target.value })} />
         </div>
+        <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-[12rem_1fr]">
+          <div>
+            <Label htmlFor="bankName">ธนาคาร</Label>
+            <Input id="bankName" value={party.bankName} maxLength={60} placeholder="เช่น กสิกร" onChange={(e) => setParty({ ...party, bankName: e.target.value })} />
+          </div>
+          <div>
+            <Label htmlFor="bankAccount">เลขที่บัญชี</Label>
+            <Input
+              id="bankAccount"
+              inputMode="numeric"
+              value={party.bankAccount}
+              maxLength={40}
+              placeholder="บันทึกไว้กับลูกค้า ใช้ตอนโอนครั้งต่อไป"
+              onChange={(e) => setParty({ ...party, bankAccount: e.target.value })}
+            />
+          </div>
+        </div>
+        {!selling && (
+          <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-[1fr_16rem]">
+            <div>
+              <Label htmlFor="lotNote">Note ของ LOT (ภายในร้าน ไม่พิมพ์ในบิล)</Label>
+              <Input
+                id="lotNote"
+                value={head.lotNote}
+                maxLength={500}
+                placeholder="เช่น ตู้เย็นจากโกดังลุงชัย รอแกะ"
+                onChange={(e) => setHead({ ...head, lotNote: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>LOT Number</Label>
+              <div className="flex h-10 items-center rounded-lg bg-slate-50 px-3 text-sm text-slate-500 ring-1 ring-slate-200">
+                {initial.lotNo ? <span className="font-semibold text-ink-900 tabular-nums">{initial.lotNo}</span> : "สร้างอัตโนมัติเมื่อบันทึก"}
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="p-3 sm:p-4">
         <div className="mb-2 hidden grid-cols-[2.5rem_minmax(0,1fr)_6.5rem_5.5rem_7.5rem_8rem_2.25rem] gap-2 px-1 text-xs font-medium text-slate-500 sm:grid">
           <span className="text-center">ลำดับ</span>
-          <span>รายการ</span>
+          <span>{selling ? "รายการที่ขาย" : "รายการ"}</span>
           <span className="text-right">จำนวน</span>
           <span>หน่วย</span>
           <span className="text-right">{text.price}</span>
           <span className="text-right">ราคารวม</span>
           <span />
         </div>
-        <div className="divide-y divide-slate-100 sm:divide-y-0">
+        <div className="divide-y divide-slate-100">
           {rows.map((r, i) => {
-            const stock = selling && r.title ? byKey.get(rowKey(r)) : undefined;
-            const over = stock && (usedQty.get(rowKey(r)) ?? 0) > (stock.remaining ?? 0) + 1e-9;
+            const src = r.sourceItemId ? sourceById.get(r.sourceItemId) : undefined;
+            const after = src ? Math.round((src.remaining - (usedBySource.get(src.id) ?? 0)) * 100) / 100 : 0;
             return (
-              <div key={r.key} className="py-2.5 sm:py-1">
+              <div key={r.key} className="space-y-2 py-2.5 sm:space-y-1.5 sm:py-2">
+                {selling && (
+                  <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+                    <span className="text-center text-sm text-slate-400 tabular-nums">{i + 1}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="hidden shrink-0 text-xs text-slate-500 sm:inline">จาก LOT</span>
+                      <div className="min-w-0 flex-1">
+                        <ItemPicker
+                          icon={Package}
+                          value={src ? `${src.lotNo} · ${src.title}` : ""}
+                          linked={!!src}
+                          options={sourceOptions}
+                          placeholder="ขายจาก LOT / รายการซื้อไหน — ค้นหาเลข LOT, note, รายการ"
+                          emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
+                          onType={() => patch(r.key, { sourceItemId: null })}
+                          onPick={(o) => pickSource(r, o.source)}
+                          right={(o) => (
+                            <span className="text-right text-xs text-slate-500">
+                              ทุนคงเหลือ
+                              <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
+                            </span>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_2.25rem] items-center gap-2 sm:grid-cols-[2.5rem_minmax(0,1fr)_6.5rem_5.5rem_7.5rem_8rem_2.25rem]">
-                  <span className="text-center text-sm text-slate-400 tabular-nums">{i + 1}</span>
+                  <span className="text-center text-sm text-slate-400 tabular-nums">{selling ? "" : i + 1}</span>
                   <ItemPicker
                     inputRef={reg(r.key, "title")}
                     value={r.title}
-                    linked={selling ? !!stock : r.productId !== null}
-                    options={options}
-                    placeholder={text.search}
-                    selling={selling}
-                    onType={(title) => patch(r.key, { title, productId: null, ...(selling && { unitName: "" }) })}
-                    onPick={(o) => pick(r.key, o)}
+                    linked={r.productId !== null}
+                    options={products}
+                    placeholder={selling ? "รายการที่ขาย เช่น ทองแดง" : "ค้นหาหรือพิมพ์รายการ"}
+                    onType={(title) => patch(r.key, { title, productId: null })}
+                    onPick={(o) => pickItem(r, o)}
+                    right={(o) =>
+                      o.price !== null && (
+                        <span className="text-sm font-semibold text-brand-700 tabular-nums">
+                          {fmtPrice(o.price)}
+                          {o.unitName && <span className="text-xs font-normal text-slate-400">/{o.unitName}</span>}
+                        </span>
+                      )
+                    }
                   />
                   <button
                     type="button"
@@ -199,25 +366,19 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
                       onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), focus(r.key, "price"))}
                       placeholder="จำนวน"
                       aria-label={`จำนวน แถวที่ ${i + 1}`}
-                      aria-invalid={over || undefined}
-                      className={cn(
-                        "h-10 w-full rounded-lg border px-2.5 text-right text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15",
-                        over ? "border-accent-500 bg-accent-50" : "border-slate-200",
-                      )}
+                      className={cn(inputCls, "text-right")}
                     />
-                    <input
+                    <select
                       value={r.unitName}
-                      maxLength={40}
-                      readOnly={selling}
-                      tabIndex={selling ? -1 : undefined}
                       onChange={(e) => patch(r.key, { unitName: e.target.value })}
-                      placeholder="หน่วย"
                       aria-label={`หน่วย แถวที่ ${i + 1}`}
-                      className={cn(
-                        "h-10 w-full rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15",
-                        selling && "bg-slate-50 text-slate-500",
-                      )}
-                    />
+                      className={cn(inputCls, "bg-white px-1.5", !r.unitName && "text-slate-400")}
+                    >
+                      <option value="">หน่วย</option>
+                      {(r.unitName && !units.includes(r.unitName) ? [r.unitName, ...units] : units).map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
                     <PriceInput
                       ref={reg(r.key, "price")}
                       value={r.unitPrice}
@@ -225,7 +386,7 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
                       onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), goNextRow(r.key))}
                       placeholder="ราคา/หน่วย"
                       aria-label={`${text.price} แถวที่ ${i + 1}`}
-                      className="h-10 w-full rounded-lg border border-slate-200 px-2.5 text-right text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15"
+                      className={cn(inputCls, "text-right")}
                     />
                     <div className="col-span-3 flex items-center justify-end gap-2 text-sm sm:col-span-1">
                       <span className="text-xs text-slate-400 sm:hidden">ราคารวม</span>
@@ -233,10 +394,14 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
                     </div>
                   </div>
                 </div>
-                {stock && (
-                  <p className={cn("mt-1 pl-[2.25rem] text-xs sm:pl-[3rem]", over ? "text-accent-600" : "text-slate-400")}>
-                    เหลือขายได้ {fmtQty(stock.remaining ?? 0)} {stock.unitName} · ทุนเฉลี่ย {fmtPrice(Math.round((stock.avgCost ?? 0) * 100) / 100)}/{stock.unitName ?? "หน่วย"}
-                    {over && " — เกินจำนวนคงเหลือ"}
+                {src && (
+                  <p className="pl-[2.25rem] text-xs text-slate-400 sm:pl-[3rem]">
+                    ทุนคงเหลือ {src.lotNo} · {src.title}: {fmtMoney(src.remaining)} → หลังบันทึก{" "}
+                    {after >= 0 ? (
+                      <b className="text-slate-600">{fmtMoney(after)}</b>
+                    ) : (
+                      <b className="text-up">คืนทุนแล้ว กำไร +{fmtMoney(-after)}</b>
+                    )}
                   </p>
                 )}
               </div>
@@ -276,6 +441,11 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
                 </button>
               ))}
             </div>
+            {!selling && head.paymentMethod === "transfer" && (
+              <p className={cn("mt-2 text-sm", party.bankAccount ? "text-slate-600" : "text-amber-600")}>
+                {party.bankAccount ? `โอนเข้า ${party.bankName} ${party.bankAccount}` : "ยังไม่มีเลขที่บัญชีลูกค้า — กรอกด้านบนเพื่อพิมพ์ลงบิล"}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="note">หมายเหตุ</Label>
@@ -317,46 +487,56 @@ export function TradeForm({ mode, options, initial }: { mode: "buy" | "sell"; op
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "");
 
-/** Item name field with a searchable list. Buying allows free text for items not in the catalogue. */
-export function ItemPicker({
+/** Text field with a searchable list (autocomplete). Free text stays allowed; picking fills the rest of the line. */
+export function ItemPicker<T extends { key: string; title: string; group: string }>({
+  id,
   value,
   linked,
   options,
   placeholder,
-  selling,
+  emptyText,
+  icon: Icon = Search,
   inputRef,
   onType,
   onPick,
+  right,
+  keepQuery = false,
 }: {
+  id?: string;
   value: string;
   linked: boolean;
-  options: TradeOption[];
+  options: T[];
   placeholder: string;
-  selling: boolean;
-  inputRef: (el: HTMLInputElement | null) => void;
+  emptyText?: string;
+  icon?: typeof Search;
+  inputRef?: (el: HTMLInputElement | null) => void;
   onType: (v: string) => void;
-  onPick: (o: TradeOption) => void;
+  onPick: (o: T) => void;
+  right?: (o: T) => React.ReactNode;
+  /** keep filtering by the typed text even when it matches an option (names typed in full) */
+  keepQuery?: boolean;
 }) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   // once an item is chosen show the whole list again, not just that one match
-  const query = linked ? "" : value;
+  const query = linked && !keepQuery ? "" : value;
   const matches = useMemo(() => {
     const q = norm(query);
     const list = q ? options.filter((o) => norm(`${o.title} ${o.group}`).includes(q)) : options;
     return list.slice(0, 50);
   }, [query, options]);
 
-  const choose = (o: TradeOption) => {
+  const choose = (o: T) => {
     setOpen(false);
     onPick(o);
   };
 
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-300" />
+      <Icon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-300" />
       <input
+        id={id}
         ref={inputRef}
         value={value}
         maxLength={200}
@@ -392,13 +572,13 @@ export function ItemPicker({
           }
         }}
         className={cn(
-          "h-10 w-full rounded-lg border bg-white pr-2.5 pl-8 text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15",
+          "h-10 w-full truncate rounded-lg border bg-white pr-2.5 pl-8 text-sm outline-none focus:border-brand-500 focus:ring-3 focus:ring-brand-500/15",
           linked ? "border-brand-200 bg-brand-50/40 font-medium" : "border-slate-200",
         )}
       />
-      {open && (matches.length > 0 || selling) && (
+      {open && (matches.length > 0 || (emptyText && value)) && (
         <ul id={listId} role="listbox" className="absolute top-full right-0 left-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl sm:right-auto sm:min-w-96">
-          {matches.length === 0 && <li className="px-3 py-3 text-sm text-slate-400">ไม่พบรายการที่ยังเหลือในสต็อก</li>}
+          {matches.length === 0 && <li className="px-3 py-3 text-sm text-slate-400">{emptyText}</li>}
           {matches.map((o, i) => (
             <li key={o.key}>
               <button
@@ -415,23 +595,7 @@ export function ItemPicker({
                   <span className="block truncate text-sm font-medium text-slate-800">{o.title}</span>
                   <span className="block truncate text-xs text-slate-400">{o.group}</span>
                 </span>
-                <span className="shrink-0 text-right text-sm tabular-nums">
-                  {selling ? (
-                    <>
-                      <span className="block font-semibold text-brand-700">
-                        เหลือ {fmtQty(o.remaining ?? 0)} <span className="text-xs font-normal text-slate-400">{o.unitName}</span>
-                      </span>
-                      <span className="block text-xs text-slate-400">ทุน ~{fmtMoney((o.remaining ?? 0) * (o.avgCost ?? 0))} ฿</span>
-                    </>
-                  ) : (
-                    o.price !== null && (
-                      <span className="font-semibold text-brand-700">
-                        {fmtPrice(o.price)}
-                        {o.unitName && <span className="text-xs font-normal text-slate-400">/{o.unitName}</span>}
-                      </span>
-                    )
-                  )}
-                </span>
+                {right && <span className="shrink-0">{right(o)}</span>}
               </button>
             </li>
           ))}

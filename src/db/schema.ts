@@ -163,11 +163,29 @@ export const invitations = pgTable("invitations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** People the shop buys from or sells to. Saved automatically from the name typed on a bill / sale. */
+export const customers = pgTable("customers", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  phone: text("phone"),
+  // for paying by transfer
+  bankName: text("bank_name"),
+  bankAccount: text("bank_account"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** บิลเงินสดรับซื้อ — what the shop paid a customer for the scrap they brought in. */
 export const bills = pgTable("bills", {
   id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
   // every row is a purchase (stock in); the printed bill number is given only once a bill is issued
   billNo: integer("bill_no").unique(),
+  // every purchase is one lot: LOT-BM + yyyymmdd + running number of that day
+  lotNo: text("lot_no").notNull().unique(),
+  // internal note about the lot (not printed on the bill)
+  lotNote: text("lot_note"),
+  // closed lots are done (sold out) and no longer offered when selling
+  lotClosedAt: timestamp("lot_closed_at", { withTimezone: true }),
   customerName: text("customer_name"),
   billDate: timestamp("bill_date", { withTimezone: true }).notNull().defaultNow(),
   paymentMethod: text("payment_method", { enum: ["cash", "transfer"] }).notNull().default("cash"),
@@ -200,6 +218,7 @@ export const billItems = pgTable(
 /** ขายออก — selling stock that was bought in (whole or split into parts) to a buyer / factory. */
 export const sales = pgTable("sales", {
   id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customers.id, { onDelete: "set null" }),
   buyerName: text("buyer_name"),
   saleDate: timestamp("sale_date", { withTimezone: true }).notNull().defaultNow(),
   paymentMethod: text("payment_method", { enum: ["cash", "transfer"] }).notNull().default("cash"),
@@ -218,7 +237,11 @@ export const saleItems = pgTable(
       .notNull()
       .references(() => sales.id, { onDelete: "cascade" }),
     lineNo: integer("line_no").notNull(),
-    // stock is matched by (product_id or title) + unit, same as bill_items
+    // the purchase line (and so the lot) the sale is deducted from, e.g. copper sold out of a bought fridge
+    sourceItemId: integer("source_item_id")
+      .notNull()
+      .references(() => billItems.id, { onDelete: "restrict" }),
+    // what was actually sold
     productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     unitName: text("unit_name"),
@@ -229,30 +252,17 @@ export const saleItems = pgTable(
   (t) => [index("sale_items_sale_idx").on(t.saleId, t.lineNo)],
 );
 
-/** Stock moves that are neither a purchase nor a sale, e.g. แยกชิ้นส่วน: one item out, its parts in. */
-export const stockAdjustments = pgTable("stock_adjustments", {
-  id: serial("id").primaryKey(),
-  adjDate: timestamp("adj_date", { withTimezone: true }).notNull().defaultNow(),
-  kind: text("kind", { enum: ["dismantle"] }).notNull().default("dismantle"),
-  note: text("note"),
-  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const stockAdjustmentItems = pgTable(
-  "stock_adjustment_items",
+/** Payment slips (or other reference photos) attached to a purchase or a sale. */
+export const attachments = pgTable(
+  "attachments",
   {
     id: serial("id").primaryKey(),
-    adjustmentId: integer("adjustment_id")
+    billId: integer("bill_id").references(() => bills.id, { onDelete: "cascade" }),
+    saleId: integer("sale_id").references(() => sales.id, { onDelete: "cascade" }),
+    imageId: uuid("image_id")
       .notNull()
-      .references(() => stockAdjustments.id, { onDelete: "cascade" }),
-    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
-    title: text("title").notNull(),
-    unitName: text("unit_name"),
-    // negative = taken out of stock, positive = put into stock
-    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }).notNull(),
-    // cost carried by the move (negative on the way out)
-    cost: money("cost").notNull(),
+      .references(() => images.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("stock_adjustment_items_adj_idx").on(t.adjustmentId)],
+  (t) => [index("attachments_bill_idx").on(t.billId), index("attachments_sale_idx").on(t.saleId)],
 );

@@ -27,12 +27,15 @@ import { cn } from "./ui";
 
 const NAV: { group: string; items: { href: string; label: string; icon: typeof Settings; superOnly?: boolean; exact?: boolean }[] }[] = [
   {
+    group: "ภาพรวม",
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
     group: "ซื้อ-ขาย",
     items: [
-      { href: "/", label: "ภาพรวม", icon: LayoutDashboard, exact: true },
       { href: "/bills", label: "รับซื้อเข้า / บิลเงินสด", icon: ReceiptText },
-      { href: "/sales", label: "ขายออก / รายรับ", icon: HandCoins },
-      { href: "/stock", label: "สต็อกคงเหลือ", icon: Boxes },
+      { href: "/sales", label: "ขายออก / ใบขาย", icon: HandCoins },
+      { href: "/lots", label: "LOT คงเหลือ", icon: Boxes },
       { href: "/reports", label: "รายงาน", icon: ChartColumn },
     ],
   },

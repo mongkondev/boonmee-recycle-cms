@@ -54,3 +54,5 @@ export const addDays = (day: string, n: number) => {
 /** Monday of the week containing `day`. */
 export const weekStart = (day: string) => addDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
 export const monthStart = (day: string) => `${day.slice(0, 7)}-01`;
+
+export const fmtSaleNo = (id: number) => `S${String(id).padStart(6, "0")}`;
