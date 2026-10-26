@@ -9,7 +9,17 @@ import { shrinkImage } from "@/lib/shrink-image";
 import { Card, FormError } from "./ui";
 
 /** Payment slips attached to a purchase or sale: thumbnails, add, remove. */
-export function Slips({ target, items }: { target: AttachTarget; items: { id: number; imageId: string }[] }) {
+export function Slips({
+  target,
+  items,
+  kind = "slip",
+  title = "สลิป / หลักฐานการจ่าย",
+}: {
+  target: AttachTarget;
+  items: { id: number; imageId: string }[];
+  kind?: "slip" | "bill";
+  title?: string;
+}) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -23,7 +33,7 @@ export function Slips({ target, items }: { target: AttachTarget; items: { id: nu
       for (const f of Array.from(files)) {
         const fd = new FormData();
         fd.set("file", await shrinkImage(f));
-        const res = await addAttachment(target, fd);
+        const res = await addAttachment(target, fd, kind);
         if (!res.ok) throw new Error(res.error);
       }
       router.refresh();
@@ -38,7 +48,7 @@ export function Slips({ target, items }: { target: AttachTarget; items: { id: nu
   return (
     <Card className="p-3">
       <div className="mb-2 flex items-center justify-between px-1">
-        <span className="text-sm font-semibold text-ink-900">สลิป / หลักฐานการจ่าย</span>
+        <span className="text-sm font-semibold text-ink-900">{title}</span>
         <span className="text-xs text-slate-400">{items.length} รูป</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -81,7 +91,7 @@ export function Slips({ target, items }: { target: AttachTarget; items: { id: nu
 }
 
 /** Slip photos chosen inside a buy / sell form: uploaded right away, linked when the form is saved. */
-export function SlipField({ value, onChange }: { value: string[]; onChange: (ids: string[]) => void }) {
+export function SlipField({ value, onChange, addLabel = "แนบสลิป" }: { value: string[]; onChange: (ids: string[]) => void; addLabel?: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -134,7 +144,7 @@ export function SlipField({ value, onChange }: { value: string[]; onChange: (ids
           className="flex size-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-200 text-xs text-slate-500 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-60"
         >
           {busy ? <LoaderCircle className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
-          {busy ? "อัพโหลด…" : "แนบสลิป"}
+          {busy ? "อัพโหลด…" : addLabel}
         </button>
       </div>
       <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => upload(e.target.files)} />

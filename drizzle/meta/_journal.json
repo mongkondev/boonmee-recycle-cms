@@ -85,6 +85,13 @@
       "when": 1792989134392,
       "tag": "0011_sale_without_lot",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792991388882,
+      "tag": "0012_attachment_kind",
+      "breakpoints": true
     }
   ]
 }

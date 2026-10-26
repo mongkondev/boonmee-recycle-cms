@@ -60,6 +60,8 @@ export type TradeFormValues = {
   lotNote?: string;
   /** image ids of attached payment slips */
   slips?: string[];
+  /** selling: image ids of the buyer's own bill / receipt */
+  bills?: string[];
   rows: Omit<Row, "key" | "group">[];
 };
 
@@ -142,6 +144,7 @@ export function TradeForm({
   const [saving, setSaving] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
   const [slips, setSlips] = useState<string[]>(initial.slips ?? []);
+  const [billImages, setBillImages] = useState<string[]>(initial.bills ?? []);
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const reg = (key: number, field: string) => (el: HTMLInputElement | null) => {
     if (el) inputs.current.set(`${key}:${field}`, el);
@@ -260,7 +263,7 @@ export function TradeForm({
     });
     const common = { id: initial.id, party, paymentMethod: head.paymentMethod, note: head.note, slipImageIds: slips };
     const res = selling
-      ? await saveSale({ ...common, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId })) })
+      ? await saveSale({ ...common, billImageIds: billImages, saleDate: head.date, items: used.map((r) => ({ ...line(r), sourceItemId: r.sourceItemId })) })
       : await saveBill({
           ...common,
           billDate: head.date,
@@ -532,6 +535,12 @@ export function TradeForm({
             <Label htmlFor="note">หมายเหตุ</Label>
             <Input id="note" value={head.note} maxLength={500} placeholder="ไม่บังคับ" onChange={(e) => setHead({ ...head, note: e.target.value })} />
           </div>
+          {selling && (
+            <div>
+              <Label>บิล / ใบรับของจากผู้ซื้อ</Label>
+              <SlipField value={billImages} onChange={setBillImages} addLabel="แนบบิล" />
+            </div>
+          )}
           <div>
             <Label>สลิป / หลักฐานการ{selling ? "รับเงิน" : "จ่ายเงิน"}</Label>
             <SlipField value={slips} onChange={setSlips} />

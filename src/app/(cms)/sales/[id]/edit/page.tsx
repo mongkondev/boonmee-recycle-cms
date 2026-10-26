@@ -36,7 +36,8 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
           date: bangkokDay(new Date(sale.saleDate)),
           paymentMethod: sale.paymentMethod,
           note: sale.note ?? "",
-          slips: slips.map((s) => s.imageId),
+          slips: slips.filter((s) => s.kind === "slip").map((s) => s.imageId),
+          bills: slips.filter((s) => s.kind === "bill").map((s) => s.imageId),
           rows: sale.items.map((i) => ({
             sourceItemId: i.sourceItemId,
             noLot: i.sourceItemId === null,

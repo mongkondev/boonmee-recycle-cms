@@ -299,7 +299,7 @@ export async function getAttachments(target: { billId: number } | { saleId: numb
   const col = "billId" in target ? schema.attachments.billId : schema.attachments.saleId;
   const id = "billId" in target ? target.billId : target.saleId;
   return db
-    .select({ id: schema.attachments.id, imageId: schema.attachments.imageId, createdAt: schema.attachments.createdAt })
+    .select({ id: schema.attachments.id, imageId: schema.attachments.imageId, kind: schema.attachments.kind, createdAt: schema.attachments.createdAt })
     .from(schema.attachments)
     .where(eq(col, id))
     .orderBy(asc(schema.attachments.id));

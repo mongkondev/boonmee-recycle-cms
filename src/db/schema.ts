@@ -261,6 +261,8 @@ export const attachments = pgTable(
     imageId: uuid("image_id")
       .notNull()
       .references(() => images.id, { onDelete: "cascade" }),
+    // slip = payment slip; bill = the buyer's own bill / receipt for a sale
+    kind: text("kind", { enum: ["slip", "bill"] }).notNull().default("slip"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("attachments_bill_idx").on(t.billId), index("attachments_sale_idx").on(t.saleId)],

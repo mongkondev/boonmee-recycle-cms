@@ -7,20 +7,28 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export const slipIdsSchema = z.array(z.string().uuid()).max(20).optional();
 
-/** Make the purchase's / sale's slips exactly `imageIds` (images uploaded from the form). */
-export async function syncAttachments(tx: Tx, target: { billId: number } | { saleId: number }, imageIds: string[] | undefined) {
+export type AttachmentKind = "slip" | "bill";
+
+/** Make the purchase's / sale's attachments of one kind exactly `imageIds` (images uploaded from the form). */
+export async function syncAttachments(
+  tx: Tx,
+  target: { billId: number } | { saleId: number },
+  imageIds: string[] | undefined,
+  kind: AttachmentKind = "slip",
+) {
   if (!imageIds) return;
   const col = "billId" in target ? schema.attachments.billId : schema.attachments.saleId;
   const id = "billId" in target ? target.billId : target.saleId;
+  const own = and(eq(col, id), eq(schema.attachments.kind, kind));
   const gone = await tx
     .select({ imageId: schema.attachments.imageId })
     .from(schema.attachments)
-    .where(and(eq(col, id), imageIds.length ? notInArray(schema.attachments.imageId, imageIds) : undefined));
+    .where(and(own, imageIds.length ? notInArray(schema.attachments.imageId, imageIds) : undefined));
   // removing the image removes its attachment row too (cascade)
   if (gone.length) await tx.delete(schema.images).where(inArray(schema.images.id, gone.map((g) => g.imageId)));
   const have = new Set(
-    (await tx.select({ imageId: schema.attachments.imageId }).from(schema.attachments).where(eq(col, id))).map((r) => r.imageId),
+    (await tx.select({ imageId: schema.attachments.imageId }).from(schema.attachments).where(own)).map((r) => r.imageId),
   );
   const add = imageIds.filter((i) => !have.has(i));
-  if (add.length) await tx.insert(schema.attachments).values(add.map((imageId) => ({ ...target, imageId })));
+  if (add.length) await tx.insert(schema.attachments).values(add.map((imageId) => ({ ...target, imageId, kind })));
 }

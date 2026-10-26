@@ -14,7 +14,17 @@ import type { ShopSettings } from "@/lib/types";
 
 type Sale = NonNullable<Awaited<ReturnType<typeof getSale>>>;
 
-export function SaleView({ sale, settings, slips, fresh }: { sale: Sale; settings: ShopSettings; slips: { id: number; imageId: string }[]; fresh: boolean }) {
+export function SaleView({
+  sale,
+  settings,
+  slips,
+  fresh,
+}: {
+  sale: Sale;
+  settings: ShopSettings;
+  slips: { id: number; imageId: string; kind: "slip" | "bill" }[];
+  fresh: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const no = fmtSaleNo(sale.id);
@@ -54,7 +64,8 @@ export function SaleView({ sale, settings, slips, fresh }: { sale: Sale; setting
         shareTitle={`ใบขาย ${no}`}
         aside={
           <>
-            <Slips target={{ saleId: sale.id }} items={slips} />
+            <Slips target={{ saleId: sale.id }} items={slips.filter((s) => s.kind === "bill")} kind="bill" title="บิล / ใบรับของจากผู้ซื้อ" />
+            <Slips target={{ saleId: sale.id }} items={slips.filter((s) => s.kind === "slip")} title="สลิป / หลักฐานการรับเงิน" />
             <Card className="grid grid-cols-2 gap-2 p-3">
               <Link href={`/sales/${sale.id}/edit`} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
                 <Pencil className="size-4" /> แก้ไข

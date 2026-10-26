@@ -33,7 +33,7 @@ export default async function EditBillPage({ params }: { params: Promise<{ id: s
           billNo: bill.billNo,
           lotNo: bill.lotNo,
           lotNote: bill.lotNote ?? "",
-          slips: slips.map((s) => s.imageId),
+          slips: slips.filter((s) => s.kind === "slip").map((s) => s.imageId),
           party: toParty(bill.customerName, bill.customer),
           date: bangkokDay(new Date(bill.billDate)),
           paymentMethod: bill.paymentMethod,

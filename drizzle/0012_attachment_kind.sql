@@ -1,0 +1,1 @@
+ALTER TABLE "attachments" ADD COLUMN "kind" text DEFAULT 'slip' NOT NULL;

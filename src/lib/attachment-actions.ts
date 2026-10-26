@@ -11,7 +11,7 @@ export type AttachTarget = { billId: number } | { saleId: number };
 const pathOf = (t: AttachTarget) => ("billId" in t ? `/bills/${t.billId}` : `/sales/${t.saleId}`);
 
 /** Attach a slip photo (already shrunk to JPEG in the browser) to a purchase or a sale. */
-export async function addAttachment(target: AttachTarget, form: FormData): Promise<ActionResult> {
+export async function addAttachment(target: AttachTarget, form: FormData, kind: "slip" | "bill" = "slip"): Promise<ActionResult> {
   await requireUser();
   const file = form.get("file");
   if (!(file instanceof File) || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) return { ok: false, error: "รองรับเฉพาะรูปภาพ" };
@@ -21,7 +21,7 @@ export async function addAttachment(target: AttachTarget, form: FormData): Promi
       .insert(schema.images)
       .values({ mime: file.type, data: Buffer.from(await file.arrayBuffer()) })
       .returning({ id: schema.images.id });
-    await tx.insert(schema.attachments).values({ ...target, imageId: img.id });
+    await tx.insert(schema.attachments).values({ ...target, imageId: img.id, kind });
   });
   revalidatePath(pathOf(target));
   return { ok: true };
