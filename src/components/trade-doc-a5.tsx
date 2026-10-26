@@ -9,7 +9,7 @@ import { RecycleMark } from "./recycle-mark";
 const INK = "#0f2a1d";
 const GREEN = "#3a9e1d";
 // table area left after header, totals and signatures (px at A5 scale)
-const TABLE_BODY_H = 790;
+const TABLE_BODY_H = 700;
 
 /** What an A5 document prints: a purchase bill (buy) or a sales slip (sell). */
 export type TradeDoc = {
@@ -32,11 +32,14 @@ const LABELS = {
 };
 
 /** One A5 (874×1240) document. Fixed px sizes only: theme text classes are scaled for the CMS. */
-export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: ShopSettings }>(function TradeDocA5({ doc: bill, settings }, ref) {
+export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: ShopSettings; qr?: string | null; logo?: string | null }>(function TradeDocA5(
+  { doc: bill, settings, qr, logo },
+  ref,
+) {
   const L = LABELS[bill.kind];
   const phones = settings.phones.split(",").map((s) => s.trim()).filter(Boolean);
   const rows = Math.max(BILL_MIN_ROWS, bill.items.length);
-  const rowH = Math.min(79, TABLE_BODY_H / rows);
+  const rowH = Math.min(70, TABLE_BODY_H / rows);
   const font = Math.max(13, Math.min(19, rowH * 0.4));
   const date = new Date(bill.date).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" });
   const cell = { height: rowH, fontSize: font, borderBottom: "1px solid #dfe6da" } as const;
@@ -51,9 +54,12 @@ export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: 
 
       {/* header */}
       <header className="relative flex items-start gap-5">
-        {settings.logo_image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/images/${settings.logo_image}`} alt="" className="size-[76px] shrink-0 rounded-[20px] object-contain" />
+        {logo ? (
+          // a box + max sizes keeps any logo shape without object-fit
+          <div className="grid size-[76px] shrink-0 place-items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logo} alt="" className="max-h-[76px] max-w-[76px]" />
+          </div>
         ) : (
           <div className="grid size-[76px] shrink-0 place-items-center rounded-[20px]" style={{ background: GREEN }}>
             <RecycleMark size={48} className="text-white" />
@@ -159,14 +165,23 @@ export const TradeDocA5 = forwardRef<HTMLDivElement, { doc: TradeDoc; settings: 
         {bill.note && <span className="min-w-0 flex-1 truncate text-right text-[15px] text-[#4b5d52]">หมายเหตุ: {bill.note}</span>}
       </div>
 
-      {/* signatures */}
-      <div className="relative mt-auto grid grid-cols-2 gap-10 px-4 text-center text-[15px] text-[#4b5d52]">
-        {L.signs.map((who) => (
-          <div key={who}>
-            <div className="mx-auto mb-1.5 h-[36px] w-[230px] border-b border-dotted border-[#7d917a]" />
-            {who}
+      {/* signatures, and the shop's LINE QR in the corner */}
+      <div className="relative mt-auto flex items-end gap-6 text-center text-[15px] text-[#4b5d52]">
+        <div className="grid flex-1 grid-cols-2 gap-8">
+          {L.signs.map((who) => (
+            <div key={who}>
+              <div className="mx-auto mb-1.5 h-[36px] w-[210px] border-b border-dotted border-[#7d917a]" />
+              {who}
+            </div>
+          ))}
+        </div>
+        {qr && (
+          <div className="flex shrink-0 flex-col items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qr} alt="" className="size-[92px] rounded-[8px] bg-white p-1 ring-1 ring-[#dfe6da]" />
+            <span className="mt-1 rounded-full bg-[#06c755] px-2.5 text-[13px] font-semibold text-white">LINE</span>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

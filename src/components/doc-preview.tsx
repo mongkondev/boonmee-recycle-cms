@@ -4,12 +4,16 @@ import { X } from "lucide-react";
 import { useEffect } from "react";
 import { A5 } from "@/lib/bill";
 import type { ShopSettings } from "@/lib/types";
+import { useImageDataUrl } from "@/lib/use-image-data-url";
+import { useLineQr } from "@/lib/use-line-qr";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 import { TradeDocA5, type TradeDoc } from "./trade-doc-a5";
 
 /** Full-screen look at the A5 document the form will produce, before saving. */
 export function DocPreview({ doc, settings, onClose }: { doc: TradeDoc; settings: ShopSettings; onClose: () => void }) {
   const w = usePreviewWidth(560, 32);
+  const { qr } = useLineQr(settings, 300);
+  const logo = useImageDataUrl(settings.logo_image);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -26,7 +30,7 @@ export function DocPreview({ doc, settings, onClose }: { doc: TradeDoc; settings
         </div>
         <div className="overflow-hidden rounded-xl shadow-2xl" style={{ width: w, height: (w / A5.width) * A5.height }}>
           <div style={{ transform: `scale(${w / A5.width})`, transformOrigin: "top left" }}>
-            <TradeDocA5 doc={doc} settings={settings} />
+            <TradeDocA5 doc={doc} settings={settings} qr={qr} logo={logo.url} />
           </div>
         </div>
       </div>

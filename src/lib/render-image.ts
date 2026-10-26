@@ -3,6 +3,8 @@ import { toJpeg, toPng } from "html-to-image";
 /** Rasterise a DOM node at its native size (preview wrappers may scale it with CSS). */
 export async function renderNode(node: HTMLElement, opts: { width: number; height: number; pixelRatio?: number; type?: "png" | "jpeg" }) {
   await document.fonts.ready;
+  // every <img> must be decoded first, or it comes out blank
+  await Promise.all([...node.querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)));
   const common = {
     width: opts.width,
     height: opts.height,
@@ -10,8 +12,17 @@ export async function renderNode(node: HTMLElement, opts: { width: number; heigh
     cacheBust: true,
     style: { transform: "none" },
   };
-  return opts.type === "jpeg" ? toJpeg(node, { ...common, quality: 0.85, backgroundColor: "#ffffff" }) : toPng(node, common);
+  const render = () => (opts.type === "jpeg" ? toJpeg(node, { ...common, quality: 0.85, backgroundColor: "#ffffff" }) : toPng(node, common));
+  // WebKit paints <img> inside the SVG snapshot only from the second pass on: warm it up first
+  if (isWebKit()) await toPng(node, { ...common, pixelRatio: 0.25 }).catch(() => undefined);
+  return render();
 }
+
+/** Safari, and every browser on iOS (they all run WebKit). */
+const isWebKit = () => {
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod/.test(ua) || (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg|OPR/.test(ua));
+};
 
 export const dataUrlToFile = async (url: string, name: string) => {
   const blob = await (await fetch(url)).blob();

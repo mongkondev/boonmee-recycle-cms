@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { A5, fmtMoney } from "@/lib/bill";
 import { dataUrlToFile, downloadUrl, imagesToPdf, renderNode, shareFilesNow } from "@/lib/render-image";
 import type { ShopSettings } from "@/lib/types";
+import { useImageDataUrl } from "@/lib/use-image-data-url";
+import { useLineQr } from "@/lib/use-line-qr";
 import { usePreviewWidth } from "@/lib/use-preview-width";
 import { TradeDocA5, type TradeDoc } from "./trade-doc-a5";
 import { Button, Card } from "./ui";
@@ -37,11 +39,14 @@ export function DocExport({
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [canShare, setCanShare] = useState(false);
-  const docKey = JSON.stringify(doc);
+  const { qr, ready: qrReady } = useLineQr(settings, 300);
+  const logo = useImageDataUrl(settings.logo_image);
+  const ready = qrReady && logo.ready;
+  const docKey = JSON.stringify([doc, qr, logo.url]);
 
   useEffect(() => setCanShare("canShare" in navigator), []);
   useEffect(() => {
-    if (!exportable) return;
+    if (!exportable || !ready) return;
     let cancelled = false;
     setImage(null);
     setFailed(false);
@@ -60,7 +65,7 @@ export function DocExport({
     return () => {
       cancelled = true;
     };
-  }, [docKey, fileBase, exportable]);
+  }, [docKey, fileBase, exportable, ready]);
 
   const preparing = exportable && !image && !failed;
 
@@ -113,7 +118,7 @@ export function DocExport({
       <div>
         <div className="overflow-hidden rounded-xl shadow-xl ring-1 ring-slate-200" style={{ width: PREVIEW_W, height: (PREVIEW_W / A5.width) * A5.height }}>
           <div style={{ transform: `scale(${PREVIEW_W / A5.width})`, transformOrigin: "top left" }}>
-            <TradeDocA5 ref={ref} doc={doc} settings={settings} />
+            <TradeDocA5 ref={ref} doc={doc} settings={settings} qr={qr} logo={logo.url} />
           </div>
         </div>
       </div>
