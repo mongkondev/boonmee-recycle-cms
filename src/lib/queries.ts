@@ -197,3 +197,68 @@ export async function getUsersAndInvites() {
     })),
   };
 }
+
+export async function getBills(search = "", limit = 200) {
+  const q = search.trim();
+  const like = `%${q}%`;
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    select b.id, b.customer_name, b.bill_date, b.payment_method, b.total,
+           (select count(*)::int from bill_items i where i.bill_id = b.id) as item_count,
+           coalesce(u.display_name, u.email, u.username) as created_by
+    from bills b left join users u on u.id = b.created_by
+    ${q ? sql`where b.customer_name ilike ${like} or b.id::text = ${q.replace(/^#?0*/, "")}
+      or exists (select 1 from bill_items i where i.bill_id = b.id and i.title ilike ${like})` : sql``}
+    order by b.bill_date desc, b.id desc limit ${limit}
+  `);
+  return rows.map((r) => ({
+    id: r.id as number,
+    customerName: r.customer_name as string | null,
+    billDate: new Date(r.bill_date as string).toISOString(),
+    paymentMethod: r.payment_method as "cash" | "transfer",
+    total: Number(r.total),
+    itemCount: r.item_count as number,
+    createdBy: r.created_by as string | null,
+  }));
+}
+
+export async function getBill(id: number) {
+  const bill = await db.query.bills.findFirst({ where: eq(schema.bills.id, id) });
+  if (!bill) return null;
+  const items = await db
+    .select()
+    .from(schema.billItems)
+    .where(eq(schema.billItems.billId, id))
+    .orderBy(asc(schema.billItems.lineNo));
+  return {
+    id: bill.id,
+    customerName: bill.customerName,
+    billDate: bill.billDate.toISOString(),
+    paymentMethod: bill.paymentMethod,
+    total: bill.total,
+    note: bill.note,
+    items: items.map((i) => ({
+      productId: i.productId,
+      title: i.title,
+      unitName: i.unitName,
+      qty: i.qty,
+      unitPrice: i.unitPrice,
+      amount: i.amount,
+    })),
+  };
+}
+
+export type BillDetail = NonNullable<Awaited<ReturnType<typeof getBill>>>;
+
+/** Products offered in the bill form, priced at the latest published price. */
+export async function getBillProducts() {
+  const rows = await getProducts();
+  return rows
+    .filter((p) => p.isActive && p.mainActive && p.subActive)
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      group: p.subName ? `${p.mainName} › ${p.subName}` : p.mainName,
+      unitName: p.unitName,
+      price: p.price,
+    }));
+}

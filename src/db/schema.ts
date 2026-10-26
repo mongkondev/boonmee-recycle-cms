@@ -4,6 +4,7 @@ import {
   jsonb,
   index,
   integer,
+  numeric,
   pgTable,
   serial,
   text,
@@ -161,3 +162,35 @@ export const invitations = pgTable("invitations", {
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** บิลเงินสดรับซื้อ — what the shop paid a customer for the scrap they brought in. */
+export const bills = pgTable("bills", {
+  id: serial("id").primaryKey(),
+  customerName: text("customer_name"),
+  billDate: timestamp("bill_date", { withTimezone: true }).notNull().defaultNow(),
+  paymentMethod: text("payment_method", { enum: ["cash", "transfer"] }).notNull().default("cash"),
+  total: money("total").notNull().default(0),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const billItems = pgTable(
+  "bill_items",
+  {
+    id: serial("id").primaryKey(),
+    billId: integer("bill_id")
+      .notNull()
+      .references(() => bills.id, { onDelete: "cascade" }),
+    lineNo: integer("line_no").notNull(),
+    // null for free-text lines; title/unit are copied so old bills never change
+    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    unitName: text("unit_name"),
+    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }).notNull(),
+    unitPrice: money("unit_price").notNull(),
+    amount: money("amount").notNull(),
+  },
+  (t) => [index("bill_items_bill_idx").on(t.billId, t.lineNo)],
+);

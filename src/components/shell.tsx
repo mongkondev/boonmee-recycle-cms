@@ -8,6 +8,7 @@ import {
   Megaphone,
   Menu,
   Package,
+  ReceiptText,
   Ruler,
   Settings,
   TrendingUp,
@@ -29,6 +30,10 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
       { href: "/history", label: "ประวัติราคา", icon: History },
       { href: "/export", label: "เมนูราคา", icon: FileImage },
     ],
+  },
+  {
+    group: "บิล",
+    items: [{ href: "/bills", label: "บิลเงินสดรับซื้อ", icon: ReceiptText }],
   },
   {
     group: "ข้อมูลหลัก",

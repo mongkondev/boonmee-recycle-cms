@@ -39,17 +39,22 @@ export function downloadUrl(url: string, name: string) {
   a.click();
 }
 
-/** A4 portrait PDF from page images (data URLs or same-origin URLs). */
-export async function imagesToA4Pdf(urls: string[], fileName: string) {
+const PAPER_MM = { a4: [210, 297], a5: [148, 210] } as const;
+
+/** Portrait PDF from page images (data URLs or same-origin URLs), one image per page. */
+export async function imagesToPdf(urls: string[], fileName: string, format: keyof typeof PAPER_MM = "a4") {
   const { jsPDF } = await import("jspdf");
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const [w, h] = PAPER_MM[format];
+  const pdf = new jsPDF({ unit: "mm", format });
   for (const [i, url] of urls.entries()) {
-    if (i) pdf.addPage("a4");
+    if (i) pdf.addPage(format);
     const data = url.startsWith("data:") ? url : await blobToDataUrl(await (await fetch(url)).blob());
-    pdf.addImage(data, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+    pdf.addImage(data, "JPEG", 0, 0, w, h, undefined, "FAST");
   }
   pdf.save(fileName);
 }
+
+export const imagesToA4Pdf = (urls: string[], fileName: string) => imagesToPdf(urls, fileName, "a4");
 
 const blobToDataUrl = (b: Blob) =>
   new Promise<string>((res, rej) => {
