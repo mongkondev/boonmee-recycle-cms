@@ -84,14 +84,20 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         </form>
       </div>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <Stat label="ซื้อเข้า" value={totals.buyAmount} sub={`${totals.buyCount} รายการ · เงินสด ${fmtMoney(totals.buyCash)} · โอน ${fmtMoney(totals.buyAmount - totals.buyCash)}`} />
-        <Stat label="ขายออก / รายรับ" value={totals.sellAmount} sub={`${totals.sellCount} รายการ`} />
+        <Stat label="ขายออก / รายรับ" value={totals.sellAmount} sub={`${totals.sellCount} รายการ · ไม่ผูก LOT ${fmtMoney(totals.unlinkedAmount)}`} />
         <Stat
           label="กำไรจาก LOT ที่ปิดในช่วงนี้"
           value={totals.closedProfit}
           sub={`${totals.closedCount} LOT · ยอดขาย − ทุนของ LOT`}
           tone={totals.closedProfit < 0 ? "bad" : undefined}
+        />
+        <Stat
+          label="กำไร / ขาดทุนรวม"
+          value={totals.closedProfit + totals.unlinkedAmount}
+          sub={`กำไร LOT ที่ปิด ${fmtMoney(totals.closedProfit)} + ขายไม่ผูก LOT ${fmtMoney(totals.unlinkedAmount)}`}
+          tone={totals.closedProfit + totals.unlinkedAmount < 0 ? "bad" : undefined}
         />
         <Stat label="เงินสุทธิ (ขาย − ซื้อ)" value={totals.sellAmount - totals.buyAmount} sub="กระแสเงินในช่วงนี้" tone={totals.sellAmount - totals.buyAmount < 0 ? "bad" : undefined} />
       </div>

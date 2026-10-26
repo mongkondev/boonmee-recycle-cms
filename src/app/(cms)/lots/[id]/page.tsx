@@ -76,7 +76,9 @@ export default async function LotPage({ params }: { params: Promise<{ id: string
                 <tr key={i.id}>
                   <td className="px-4 py-2">
                     <div className="font-medium text-slate-800">{i.title}</div>
-                    <div className="text-xs text-slate-400">{fmtQty(i.qty)} {i.unitName}</div>
+                    <div className="text-xs text-slate-400">
+                      ซื้อ {fmtQty(i.qty)} {i.unitName} · <span className={cn(i.qtyLeft <= 0 && "text-up")}>เหลือ {fmtQty(Math.max(0, i.qtyLeft))} {i.unitName}</span>
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(i.cost)}</td>
                   <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{fmtMoney(i.sold)}</td>
@@ -105,7 +107,7 @@ export default async function LotPage({ params }: { params: Promise<{ id: string
                 <tr key={s.id}>
                   <td className="px-4 py-2">
                     <div className="font-medium text-slate-800">{s.title} <span className="font-normal text-slate-400">{fmtQty(s.qty)} {s.unitName}</span></div>
-                    <div className="text-xs text-slate-400">จาก {s.sourceTitle} · {fmtDate(s.saleDate)}</div>
+                    <div className="text-xs text-slate-400">จาก {s.sourceTitle} · {fmtDate(s.saleDate)}{s.auto && " · หา LOT อัตโนมัติ"}</div>
                   </td>
                   <td className="hidden px-3 py-2 text-xs sm:table-cell">
                     <Link href={`/sales/${s.saleId}`} className="font-medium text-brand-700 hover:underline">{fmtSaleNo(s.saleId)}</Link>

@@ -41,6 +41,7 @@ export default async function EditSalePage({ params }: { params: Promise<{ id: s
           rows: sale.items.map((i) => ({
             sourceItemId: i.sourceItemId,
             noLot: i.sourceItemId === null,
+            auto: i.autoLot,
             productId: i.productId,
             title: i.title,
             unitName: i.unitName ?? "",

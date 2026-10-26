@@ -1,14 +1,16 @@
 "use server";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import type { ActionResult } from "./actions";
 import { requireUser } from "./auth";
+import { allocate, toAllocSources } from "./allocate";
 import { BILL_MAX_ROWS, bangkokDay } from "./bill";
 import { slipIdsSchema, syncAttachments } from "./attachments";
 import { partySchema, upsertCustomer } from "./customers";
+import { getSourceOptions } from "./trade-queries";
 
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
@@ -31,8 +33,9 @@ const firstIssue = (e: z.ZodError) => {
 /* ---------------- sales ---------------- */
 
 const saleItemSchema = z.object({
-  // null = from the mixed pile (ไม่ระบุ LOT)
+  // picked purchase line; null = found automatically (auto) or sold without a lot
   sourceItemId: z.number().int().nullable(),
+  auto: z.boolean().default(false),
   productId: z.number().int().nullable(),
   title: z.string().trim().min(1, "กรุณากรอกรายการที่ขาย").max(200),
   unitName: z.string().trim().max(40).nullable(),
@@ -49,6 +52,8 @@ const saleSchema = z.object({
   slipImageIds: slipIdsSchema,
   // photos of the buyer's own bill / receipt
   billImageIds: slipIdsSchema,
+  // lots sold out with this sale: close them
+  closeLotIds: z.array(z.number().int()).max(BILL_MAX_ROWS).default([]),
   items: z.array(saleItemSchema).min(1, "กรุณาเพิ่มอย่างน้อย 1 รายการ").max(BILL_MAX_ROWS, `ใส่ได้ไม่เกิน ${BILL_MAX_ROWS} รายการ`),
 });
 
@@ -59,11 +64,11 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
   const user = await requireUser();
   const parsed = saleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
-  const { id, items, saleDate, party, slipImageIds, billImageIds, ...head } = parsed.data;
-  const lines = items.map((it, i) => {
+  const { id, items, saleDate, party, slipImageIds, billImageIds, closeLotIds, ...head } = parsed.data;
+  const lines = items.map(({ auto, ...it }, i) => {
     const qty = round(it.qty, 3);
     const unitPrice = round(it.unitPrice, 2);
-    return { ...it, unitName: it.unitName || null, qty, unitPrice, amount: round(qty * unitPrice, 2), lineNo: i + 1 };
+    return { ...it, autoLot: !it.sourceItemId && auto, unitName: it.unitName || null, qty, unitPrice, amount: round(qty * unitPrice, 2), lineNo: i + 1 };
   });
   const sourceIds = [...new Set(lines.flatMap((l) => (l.sourceItemId ? [l.sourceItemId] : [])))];
   const found = sourceIds.length
@@ -73,6 +78,8 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
 
   const total = round(lines.reduce((s, l) => s + l.amount, 0), 2);
   const savedId = await db.transaction(async (tx) => {
+    // read before this sale's old lines go: an edited sale may keep using lots closed since
+    const sources = toAllocSources(await getSourceOptions(id ?? 0, tx));
     const customerId = await upsertCustomer(tx, party);
     const values = { ...head, buyerName: party.name, customerId, total };
     let saleId = id;
@@ -91,7 +98,20 @@ export async function saveSale(input: SaleInput): Promise<ActionResult<{ id: num
         .returning({ id: schema.sales.id });
       saleId = row.id;
     }
-    await tx.insert(schema.saleItems).values(lines.map((l) => ({ ...l, saleId: saleId! })));
+    const inserted = await tx
+      .insert(schema.saleItems)
+      .values(lines.map((l) => ({ ...l, saleId: saleId! })))
+      .returning({ id: schema.saleItems.id });
+    // deduct each line from its lots; automatic lines are split over the same item, oldest lot first
+    const plan = allocate(lines.map((l) => ({ ...l, auto: l.autoLot })), sources);
+    const allocs = plan.flatMap((parts, i) => parts.map((p) => ({ saleItemId: inserted[i].id, billItemId: p.sourceId, qty: p.qty, amount: p.amount })));
+    if (allocs.length) await tx.insert(schema.saleAllocations).values(allocs);
+    if (closeLotIds.length) {
+      await tx
+        .update(schema.bills)
+        .set({ lotClosedAt: new Date() })
+        .where(and(inArray(schema.bills.id, closeLotIds), isNull(schema.bills.lotClosedAt)));
+    }
     await syncAttachments(tx, { saleId }, slipImageIds, "slip");
     await syncAttachments(tx, { saleId }, billImageIds, "bill");
     return saleId;

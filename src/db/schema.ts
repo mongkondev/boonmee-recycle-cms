@@ -240,6 +240,8 @@ export const saleItems = pgTable(
     // the purchase line (and so the lot) the sale is deducted from, e.g. copper sold out of a bought fridge
     // null = sold from the mixed pile, not from a particular lot
     sourceItemId: integer("source_item_id").references(() => billItems.id, { onDelete: "restrict" }),
+    // "ไม่ระบุ LOT": the system found the lots from the item sold (oldest first); see saleAllocations
+    autoLot: boolean("auto_lot").notNull().default(false),
     // what was actually sold
     productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
     title: text("title").notNull(),
@@ -249,6 +251,27 @@ export const saleItems = pgTable(
     amount: money("amount").notNull(),
   },
   (t) => [index("sale_items_sale_idx").on(t.saleId, t.lineNo)],
+);
+
+/**
+ * How much of a sale line is deducted from which purchase line. A picked line has one row; a line whose
+ * lots were found automatically is split over several lots, oldest first. Lines with no row = sold without a lot.
+ */
+export const saleAllocations = pgTable(
+  "sale_allocations",
+  {
+    id: serial("id").primaryKey(),
+    saleItemId: integer("sale_item_id")
+      .notNull()
+      .references(() => saleItems.id, { onDelete: "cascade" }),
+    billItemId: integer("bill_item_id")
+      .notNull()
+      .references(() => billItems.id, { onDelete: "restrict" }),
+    // counted against the purchase line's quantity only when the same item in the same unit was sold
+    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }),
+    amount: money("amount").notNull(),
+  },
+  (t) => [index("sale_allocations_item_idx").on(t.saleItemId), index("sale_allocations_bill_item_idx").on(t.billItemId)],
 );
 
 /** Payment slips (or other reference photos) attached to a purchase or a sale. */

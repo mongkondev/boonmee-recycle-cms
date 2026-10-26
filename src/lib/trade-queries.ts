@@ -6,6 +6,7 @@ import { getBillProducts } from "./queries";
 const BKK = sql.raw("'Asia/Bangkok'");
 const ITEM_KEY = sql.raw(`coalesce('p' || m.product_id, 't' || lower(trim(m.title))) || '|' || coalesce(m.unit_name, '')`);
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /* ---------------- lots ---------------- */
 
@@ -37,7 +38,7 @@ export async function getLots(opts: { id?: number; open?: boolean; search?: stri
     select b.id, b.lot_no, b.lot_note, b.bill_no, b.bill_date, b.customer_name, b.lot_closed_at, b.total,
            (select count(*)::int from bill_items i where i.bill_id = b.id) as item_count,
            (select string_agg(i.title, ', ' order by i.line_no) from bill_items i where i.bill_id = b.id) as titles,
-           coalesce((select sum(si.amount) from sale_items si join bill_items i on i.id = si.source_item_id where i.bill_id = b.id), 0) as sold
+           coalesce((select sum(a.amount) from sale_allocations a join bill_items i on i.id = a.bill_item_id where i.bill_id = b.id), 0) as sold
     from bills b
     where true
       ${opts.id ? sql`and b.id = ${opts.id}` : sql``}
@@ -74,13 +75,16 @@ export async function getLot(id: number) {
   if (!lot) return null;
   const items = await db.execute<Record<string, unknown>>(sql`
     select i.id, i.title, i.unit_name, i.qty, i.amount,
-           coalesce((select sum(si.amount) from sale_items si where si.source_item_id = i.id), 0) as sold
+           coalesce((select sum(a.amount) from sale_allocations a where a.bill_item_id = i.id), 0) as sold,
+           coalesce((select sum(a.qty) from sale_allocations a where a.bill_item_id = i.id), 0) as sold_qty
     from bill_items i where i.bill_id = ${id} order by i.line_no
   `);
   const sales = await db.execute<Record<string, unknown>>(sql`
-    select si.id, s.id as sale_id, s.sale_date, s.buyer_name, si.title, si.unit_name, si.qty, si.unit_price, si.amount, i.title as source_title
-    from sale_items si join sales s on s.id = si.sale_id join bill_items i on i.id = si.source_item_id
-    where i.bill_id = ${id} order by s.sale_date desc, si.id
+    select a.id, s.id as sale_id, s.sale_date, s.buyer_name, si.title, si.unit_name, coalesce(a.qty, si.qty) as qty, si.unit_price,
+           a.amount, si.auto_lot, i.title as source_title
+    from sale_allocations a join sale_items si on si.id = a.sale_item_id join sales s on s.id = si.sale_id
+      join bill_items i on i.id = a.bill_item_id
+    where i.bill_id = ${id} order by s.sale_date desc, si.id, a.id
   `);
   return {
     ...lot,
@@ -92,6 +96,8 @@ export async function getLot(id: number) {
         title: r.title as string,
         unitName: r.unit_name as string | null,
         qty: Number(r.qty),
+        /** quantity not yet sold as the same item (other items sold out of it count in money only) */
+        qtyLeft: round3(Number(r.qty) - Number(r.sold_qty)),
         cost,
         sold,
         remaining: Math.max(0, round2(cost - sold)),
@@ -107,6 +113,7 @@ export async function getLot(id: number) {
       qty: Number(r.qty),
       unitPrice: Number(r.unit_price),
       amount: Number(r.amount),
+      auto: r.auto_lot as boolean,
       sourceTitle: r.source_title as string,
     })),
   };
@@ -122,20 +129,30 @@ export type SourceOption = {
   title: string;
   unitName: string | null;
   qty: number;
+  /** quantity not yet sold as the same item in the same unit, not counting the sale being edited */
+  qtyLeft: number;
   cost: number;
   /** sold so far, not counting the sale being edited */
   sold: number;
   remaining: number;
 };
 
-/** Purchase lines a sale can be deducted from: open lots, plus lines the edited sale already uses. */
-export async function getSourceOptions(excludeSaleId = 0): Promise<SourceOption[]> {
-  const rows = await db.execute<Record<string, unknown>>(sql`
+/**
+ * Purchase lines a sale can be deducted from: open lots, plus lines the edited sale already uses. Newest first.
+ * `tx` lets saveSale read them inside its transaction.
+ */
+export async function getSourceOptions(excludeSaleId = 0, tx: Pick<typeof db, "execute"> = db): Promise<SourceOption[]> {
+  const rows = await tx.execute<Record<string, unknown>>(sql`
     select i.id, b.id as lot_id, b.lot_no, b.lot_note, b.customer_name, i.product_id, i.title, i.unit_name, i.qty, i.amount,
-           coalesce((select sum(si.amount) from sale_items si where si.source_item_id = i.id and si.sale_id <> ${excludeSaleId}), 0) as sold
+           coalesce(o.amount, 0) as sold, coalesce(o.qty, 0) as sold_qty
     from bill_items i join bills b on b.id = i.bill_id
+      left join lateral (
+        select sum(a.amount) as amount, sum(a.qty) as qty from sale_allocations a join sale_items si on si.id = a.sale_item_id
+        where a.bill_item_id = i.id and si.sale_id <> ${excludeSaleId}
+      ) o on true
     where b.lot_closed_at is null
-       or exists (select 1 from sale_items si where si.source_item_id = i.id and si.sale_id = ${excludeSaleId})
+       or exists (select 1 from sale_allocations a join sale_items si on si.id = a.sale_item_id
+                  where a.bill_item_id = i.id and si.sale_id = ${excludeSaleId})
     order by b.bill_date desc, b.id desc, i.line_no
   `);
   return rows.map((r) => {
@@ -151,6 +168,7 @@ export async function getSourceOptions(excludeSaleId = 0): Promise<SourceOption[
       title: r.title as string,
       unitName: r.unit_name as string | null,
       qty: Number(r.qty),
+      qtyLeft: round3(Number(r.qty) - Number(r.sold_qty)),
       cost,
       sold,
       remaining: Math.max(0, round2(cost - sold)),
@@ -180,13 +198,13 @@ export async function getSales(search = "", limit = 200) {
   const rows = await db.execute<Record<string, unknown>>(sql`
     select s.id, s.buyer_name, s.sale_date, s.payment_method, s.total,
            (select count(*)::int from sale_items i where i.sale_id = s.id) as item_count,
-           (select string_agg(distinct b.lot_no, ', ') from sale_items si join bill_items i on i.id = si.source_item_id
-              join bills b on b.id = i.bill_id where si.sale_id = s.id) as lots
+           (select string_agg(distinct b.lot_no, ', ') from sale_items si join sale_allocations a on a.sale_item_id = si.id
+              join bill_items i on i.id = a.bill_item_id join bills b on b.id = i.bill_id where si.sale_id = s.id) as lots
     from sales s
     ${q ? sql`where s.buyer_name ilike ${like} or s.id::text = ${q.replace(/^[#sS]?0*/, "")}
       or exists (select 1 from sale_items i where i.sale_id = s.id and i.title ilike ${like})
-      or exists (select 1 from sale_items si join bill_items i on i.id = si.source_item_id join bills b on b.id = i.bill_id
-                 where si.sale_id = s.id and b.lot_no ilike ${like})` : sql``}
+      or exists (select 1 from sale_items si join sale_allocations a on a.sale_item_id = si.id join bill_items i on i.id = a.bill_item_id
+                 join bills b on b.id = i.bill_id where si.sale_id = s.id and b.lot_no ilike ${like})` : sql``}
     order by s.sale_date desc, s.id desc limit ${limit}
   `);
   return rows.map((r) => ({
@@ -245,8 +263,10 @@ export async function getTotals(r: DayRange) {
       (select coalesce(sum(total), 0) from sales s where ${inRange(sql`s.sale_date`, r)}) as sell_amount,
       (select count(*)::int from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_count,
       (select coalesce(sum(
-         coalesce((select sum(si.amount) from sale_items si join bill_items i on i.id = si.source_item_id where i.bill_id = b.id), 0) - b.total
-       ), 0) from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_profit
+         coalesce((select sum(a.amount) from sale_allocations a join bill_items i on i.id = a.bill_item_id where i.bill_id = b.id), 0) - b.total
+       ), 0) from bills b where b.lot_closed_at is not null and ${inRange(sql`b.lot_closed_at`, r)}) as closed_profit,
+      (select coalesce(sum(si.amount - coalesce((select sum(a.amount) from sale_allocations a where a.sale_item_id = si.id), 0)), 0)
+         from sale_items si join sales s on s.id = si.sale_id where ${inRange(sql`s.sale_date`, r)}) as unlinked_amount
   `);
   return {
     buyCount: row.buy_count as number,
@@ -257,6 +277,8 @@ export async function getTotals(r: DayRange) {
     /** lots closed in the range: what they sold minus what they cost */
     closedCount: row.closed_count as number,
     closedProfit: Number(row.closed_profit),
+    /** sold without a lot: no cost behind it, so not part of any lot's profit */
+    unlinkedAmount: Number(row.unlinked_amount),
   };
 }
 
