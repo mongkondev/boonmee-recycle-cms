@@ -23,6 +23,8 @@ export type TradeOption = {
   unitName: string | null;
   /** price filled in when picked */
   price: number | null;
+  /** selling: a purchase line of an open lot, deducted from when picked */
+  sourceId?: number;
 };
 
 type Row = {
@@ -31,9 +33,11 @@ type Row = {
   group: number;
   /** buying: the existing purchase line being edited */
   itemId?: number;
-  /** selling: the purchase line (lot) this sale is deducted from */
+  /** selling: the lot this row's group sells from */
+  lotId?: number | null;
+  /** selling: the purchase line this sale is deducted from (its lot's balance goes down) */
   sourceItemId: number | null;
-  /** selling: explicitly sold from the mixed pile, not from a lot */
+  /** selling: not tied to one lot; each line picks an item from any open lot (or the mixed pile) */
   noLot?: boolean;
   /** selling: text typed into the lot search before a lot is picked */
   sourceQuery?: string;
@@ -71,9 +75,10 @@ const TEXT = {
 };
 
 let nextKey = 0;
-const blankRow = (group = 0, sourceItemId: number | null = null, noLot = false): Row => ({
+const blankRow = (group = 0, lotId: number | null = null, noLot = false, sourceItemId: number | null = null): Row => ({
   key: nextKey++,
   group,
+  lotId,
   sourceItemId,
   noLot,
   productId: null,
@@ -82,6 +87,8 @@ const blankRow = (group = 0, sourceItemId: number | null = null, noLot = false):
   qty: "",
   unitPrice: "",
 });
+type Lot = { id: number; lotNo: string; lotNote: string | null; customerName: string | null; items: SourceOption[]; remaining: number };
+
 const num = (s: string) => (s === "" || s === "." ? NaN : Number(s));
 const amountOf = (r: Row) => {
   const v = num(r.qty) * num(r.unitPrice);
@@ -126,17 +133,21 @@ export function TradeForm({
   // a purchase bill prints like a 10-line paper pad; sales lines carry a lot picker each, so start with fewer
   const minRows = selling ? 3 : BILL_MIN_ROWS;
   const [rows, setRows] = useState<Row[]>(() => {
+    const lotOf = new Map(sources.map((s) => [s.id, s.lotId]));
     // consecutive lines sold from the same lot form one group
     let group = 0;
-    const filled = initial.rows.map((r, i) => {
-      const prev = initial.rows[i - 1];
-      if (prev && (prev.sourceItemId !== r.sourceItemId || !!prev.noLot !== !!r.noLot)) group++;
-      return { ...r, group, key: nextKey++ };
+    let prevKey: string | undefined;
+    const filled = initial.rows.map((r) => {
+      const lotId = r.noLot ? null : (r.lotId ?? (r.sourceItemId ? lotOf.get(r.sourceItemId) : null) ?? null);
+      const k = r.noLot ? "none" : String(lotId);
+      if (prevKey !== undefined && prevKey !== k) group++;
+      prevKey = k;
+      return { ...r, lotId, group, key: nextKey++ };
     });
     const last = filled.at(-1);
     return [
       ...filled,
-      ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow(group, last?.sourceItemId ?? null, !!last?.noLot)),
+      ...Array.from({ length: Math.max(0, minRows - filled.length) }, () => blankRow(group, last?.lotId ?? null, !!last?.noLot)),
     ];
   });
   const groups = [...new Set(rows.map((r) => r.group))];
@@ -153,18 +164,45 @@ export function TradeForm({
   const focus = (key: number, field: string) => setTimeout(() => inputs.current.get(`${key}:${field}`)?.focus(), 0);
 
   const sourceById = useMemo(() => new Map(sources.map((s) => [s.id, s])), [sources]);
-  const sourceOptions = useMemo(
+  // open lots, each with the purchase lines still in it
+  const lots = useMemo(() => {
+    const m = new Map<number, Lot>();
+    for (const s of sources) {
+      const lot = m.get(s.lotId) ?? { id: s.lotId, lotNo: s.lotNo, lotNote: s.lotNote, customerName: s.customerName, items: [], remaining: 0 };
+      lot.items.push(s);
+      lot.remaining = Math.round((lot.remaining + s.remaining) * 100) / 100;
+      m.set(s.lotId, lot);
+    }
+    return m;
+  }, [sources]);
+  const lotOptions = useMemo(
     () => [
-      { key: "none", title: "ไม่ระบุ LOT", group: "ขายจากกองรวม ไม่หักทุนของ LOT ใด", source: null },
-      ...sources.map((s) => ({
-        key: String(s.id),
-        title: `${s.title}${s.qty ? ` ${fmtQty(s.qty)} ${s.unitName ?? ""}` : ""}`,
-        group: [s.lotNo, s.lotNote, s.customerName].filter(Boolean).join(" · "),
-        source: s as SourceOption | null,
+      { key: "none", title: "ไม่ระบุ LOT", group: "หยิบของจาก LOT ไหนก็ได้ที่ยังเปิดอยู่ · หักทุนตามของที่เลือก", lot: null as Lot | null },
+      ...[...lots.values()].map((l) => ({
+        key: String(l.id),
+        title: l.lotNo,
+        group: [`${l.items.length} รายการ`, l.items.map((i) => i.title).join(", "), l.lotNote, l.customerName].filter(Boolean).join(" · "),
+        lot: l as Lot | null,
       })),
     ],
-    [sources],
+    [lots],
   );
+  // selling: the lot's own items come first in a line's search, then the catalogue (e.g. copper taken out of a fridge)
+  const lotItemOptions = useMemo(() => {
+    const opt = (s: SourceOption): TradeOption => ({
+      key: `s${s.id}`,
+      productId: s.productId,
+      title: s.title,
+      group: `${s.lotNo} · ซื้อ ${fmtQty(s.qty)} ${s.unitName ?? ""} · ทุนเหลือ ${fmtMoney(s.remaining)}`,
+      unitName: s.unitName,
+      price: null,
+      sourceId: s.id,
+    });
+    const all = sources.map(opt);
+    return { all: [...all, ...products], byLot: new Map([...lots.values()].map((l) => [l.id, [...l.items.map(opt), ...products]])) };
+  }, [sources, lots, products]);
+  const rowOptions = (r: Row) => (!selling ? products : r.lotId ? (lotItemOptions.byLot.get(r.lotId) ?? products) : r.noLot ? lotItemOptions.all : products);
+
   const customerOptions = useMemo(
     () =>
       customers.map((c) => ({
@@ -188,7 +226,8 @@ export function TradeForm({
   const addRow = (group = groups.at(-1) ?? 0) => {
     if (rows.length >= BILL_MAX_ROWS) return;
     const first = rows.find((x) => x.group === group);
-    const r = blankRow(group, first?.sourceItemId ?? null, !!first?.noLot);
+    const lot = first?.lotId ? lots.get(first.lotId) : undefined;
+    const r = blankRow(group, first?.lotId ?? null, !!first?.noLot, lot?.items.length === 1 ? lot.items[0].id : null);
     setRows((rs) => {
       const at = rs.findLastIndex((x) => x.group === group) + 1;
       return at ? [...rs.slice(0, at), r, ...rs.slice(at)] : [...rs, r];
@@ -212,8 +251,20 @@ export function TradeForm({
     else addRow(rows[i].group);
   };
 
+  /**
+   * "ไม่ระบุ LOT": the lot comes from the item itself — the oldest open lot holding the same item that still has cost left.
+   * No such item in any lot = sold from the stock without a lot.
+   */
+  const matchSource = (productId: number | null, title: string) => {
+    const t = norm(title);
+    const same = sources.filter((s) => (productId !== null && s.productId === productId) || (t && norm(s.title) === t));
+    // sources come newest first
+    return same.findLast((s) => s.remaining > (usedBySource.get(s.id) ?? 0)) ?? same.at(-1) ?? null;
+  };
+
   const pickItem = (row: Row, o: TradeOption) => {
     patch(row.key, {
+      ...(o.sourceId ? { sourceItemId: o.sourceId } : row.noLot && { sourceItemId: matchSource(o.productId, o.title)?.id ?? null }),
       productId: o.productId,
       title: o.title,
       unitName: o.unitName ?? "",
@@ -224,13 +275,25 @@ export function TradeForm({
 
   const setGroupSource = (group: number, p: Partial<Row>) => setRows((rs) => rs.map((r) => (r.group === group ? { ...r, ...p } : r)));
 
-  const pickSource = (group: number, s: SourceOption | null) => {
-    setGroupSource(group, { sourceItemId: s?.id ?? null, noLot: !s, sourceQuery: "" });
-    const first = rows.find((r) => r.group === group)!;
+  const pickLot = (group: number, lot: Lot | null) => {
+    const only = lot?.items.length === 1 ? lot.items[0].id : null;
+    setRows((rs) =>
+      rs.map((r) => {
+        if (r.group !== group) return r;
+        // lines already deducted from another lot's item lose that link when switching to a lot
+        const keep = r.sourceItemId && (!lot || lot.items.some((i) => i.id === r.sourceItemId));
+        return { ...r, lotId: lot?.id ?? null, noLot: !lot, sourceQuery: "", sourceItemId: keep ? r.sourceItemId : only };
+      }),
+    );
     // selling the purchased item as it is: start the first line from the same item; it can be changed to the part sold
-    if (s && !first.title) patch(first.key, { title: s.title, unitName: s.unitName ?? "" });
+    const first = rows.find((r) => r.group === group)!;
+    if (lot?.items.length === 1 && !first.title) patch(first.key, { title: lot.items[0].title, unitName: lot.items[0].unitName ?? "" });
     focus(first.key, "title");
   };
+
+  /** Deduct a line from a purchase line; an empty line starts as that item. */
+  const pickSource = (r: Row, s: SourceOption | undefined) =>
+    patch(r.key, { sourceItemId: s?.id ?? null, ...(s && !r.title.trim() && { title: s.title, unitName: s.unitName ?? "", productId: null }) });
 
   const removeRow = (key: number) =>
     setRows((rs) => {
@@ -239,7 +302,7 @@ export function TradeForm({
       if (!selling) return left.length >= minRows ? left : [...left, blankRow()];
       // keep the lot group alive with an empty line while it is the only group
       if (left.some((r) => r.group === gone.group) || left.length) return left;
-      return [blankRow(gone.group, gone.sourceItemId, !!gone.noLot)];
+      return [blankRow(gone.group, gone.lotId ?? null, !!gone.noLot)];
     });
 
   async function submit(issueBill: boolean) {
@@ -247,7 +310,8 @@ export function TradeForm({
     const used = rows.filter((r) => r.title.trim() || r.qty || r.unitPrice);
     for (const r of used) {
       const n = rows.indexOf(r) + 1;
-      if (selling && !r.sourceItemId && !r.noLot) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT ไหน หรือ "ไม่ระบุ LOT"`);
+      if (selling && !r.lotId && !r.noLot) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจาก LOT ไหน หรือ "ไม่ระบุ LOT"`);
+      if (selling && r.lotId && !r.sourceItemId) return setError(`แถวที่ ${n}: กรุณาเลือกว่าขายจากของชิ้นไหนใน LOT (หักทุนจาก)`);
       if (!r.title.trim()) return setError(`แถวที่ ${n}: กรุณากรอกชื่อรายการ`);
       if (!(num(r.qty) > 0)) return setError(`แถวที่ ${n}: กรุณากรอกจำนวน`);
       if (!Number.isFinite(num(r.unitPrice))) return setError(`แถวที่ ${n}: กรุณากรอก${text.price}`);
@@ -286,13 +350,15 @@ export function TradeForm({
         <ItemPicker
           inputRef={reg(r.key, "title")}
           value={r.title}
-          linked={r.productId !== null}
-          options={products}
+          linked={r.productId !== null || (!!r.sourceItemId && sourceById.get(r.sourceItemId)?.title === r.title)}
+          options={rowOptions(r)}
           placeholder={selling ? "รายการที่ขาย เช่น ทองแดง" : "ค้นหาหรือพิมพ์รายการ"}
-          onType={(title) => patch(r.key, { title, productId: null })}
+          onType={(title) => patch(r.key, { title, productId: null, ...(r.noLot && { sourceItemId: matchSource(null, title)?.id ?? null }) })}
           onPick={(o) => pickItem(r, o)}
           right={(o) =>
-            o.price !== null && (
+            o.sourceId ? (
+              <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700">ของใน LOT</span>
+            ) : o.price !== null && (
               <span className="text-sm font-semibold text-brand-700 tabular-nums">
                 {fmtPrice(o.price)}
                 {o.unitName && <span className="text-xs font-normal text-slate-400">/{o.unitName}</span>}
@@ -345,8 +411,59 @@ export function TradeForm({
           </div>
         </div>
       </div>
+      {selling && (r.lotId || r.noLot) && renderSource(r, i)}
     </div>
   );
+
+  /** Selling: which purchase line (and so which lot) the row is deducted from. */
+  const renderSource = (r: Row, i: number) => {
+    const lot = r.lotId ? lots.get(r.lotId) : undefined;
+    const src = r.sourceItemId ? sourceById.get(r.sourceItemId) : undefined;
+    const after = src ? Math.round((src.remaining - (usedBySource.get(src.id) ?? 0)) * 100) / 100 : 0;
+    const opt = (s: SourceOption) => (
+      <option key={s.id} value={s.id}>
+        {s.title}
+        {s.qty ? ` ${fmtQty(s.qty)} ${s.unitName ?? ""}` : ""} · ทุนเหลือ {fmtMoney(s.remaining)}
+      </option>
+    );
+    return (
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[2.25rem] text-xs sm:pl-[3rem]">
+        <span className="shrink-0 text-slate-500">หักทุนจาก</span>
+        <select
+          value={r.sourceItemId ?? ""}
+          onChange={(e) => pickSource(r, sourceById.get(Number(e.target.value)))}
+          aria-label={`หักทุนจาก แถวที่ ${i + 1}`}
+          className={cn(
+            "h-8 max-w-full min-w-0 flex-1 rounded-lg border bg-white px-1.5 text-xs outline-none focus:border-brand-500 sm:max-w-md sm:flex-none",
+            src ? "border-brand-200 font-medium text-ink-900" : lot ? "border-amber-300 text-amber-700" : "border-slate-200 text-slate-500",
+          )}
+        >
+          {lot ? (
+            <>
+              <option value="">— เลือกของใน LOT นี้ —</option>
+              {lot.items.map(opt)}
+            </>
+          ) : (
+            <>
+              <option value="">ไม่มี LOT (ยอดรวมสินค้าไม่มี LOT)</option>
+              {[...lots.values()].map((l) => (
+                <optgroup key={l.id} label={[l.lotNo, l.customerName].filter(Boolean).join(" · ")}>
+                  {l.items.map(opt)}
+                </optgroup>
+              ))}
+            </>
+          )}
+        </select>
+        {src && (
+          <span className="basis-full text-slate-500 sm:basis-auto">
+            {r.noLot && <span className="font-medium text-slate-600 tabular-nums">{src.lotNo} · </span>}
+            เหลือหลังบันทึก{" "}
+            {after >= 0 ? <b className="text-slate-700 tabular-nums">{fmtMoney(after)}</b> : <b className="text-up">คืนทุนแล้ว +{fmtMoney(-after)}</b>}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -439,8 +556,9 @@ export function TradeForm({
             {groups.map((g, gi) => {
               const groupRows = rows.filter((r) => r.group === g);
               const first = groupRows[0];
-              const src = first.sourceItemId ? sourceById.get(first.sourceItemId) : undefined;
-              const after = src ? Math.round((src.remaining - (usedBySource.get(src.id) ?? 0)) * 100) / 100 : 0;
+              const lot = first.lotId ? lots.get(first.lotId) : undefined;
+              const lotUsed = lot ? lot.items.reduce((s, it) => s + (usedBySource.get(it.id) ?? 0), 0) : 0;
+              const after = lot ? Math.round((lot.remaining - lotUsed) * 100) / 100 : 0;
               return (
                 <div key={g} className="rounded-xl bg-slate-50/70 p-2 ring-1 ring-slate-200 sm:p-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -449,28 +567,33 @@ export function TradeForm({
                       <ItemPicker
                         icon={Package}
                         inputRef={reg(first.key, "source")}
-                        value={src ? `${src.lotNo} · ${src.title}` : first.noLot ? "ไม่ระบุ LOT (กองรวม)" : (first.sourceQuery ?? "")}
-                        linked={!!src || !!first.noLot}
-                        options={sourceOptions}
-                        placeholder="เลือก LOT / รายการซื้อ — ค้นหาเลข LOT, note, รายการ"
+                        value={lot ? [lot.lotNo, lot.customerName].filter(Boolean).join(" · ") : first.noLot ? "ไม่ระบุ LOT" : (first.sourceQuery ?? "")}
+                        linked={!!lot || !!first.noLot}
+                        options={lotOptions}
+                        placeholder="เลือก LOT — ค้นหาเลข LOT, note, ของในล็อต"
                         emptyText="ไม่พบ LOT ที่ยังเปิดอยู่"
-                        onType={(q) => setGroupSource(g, { sourceItemId: null, noLot: false, sourceQuery: q })}
-                        onPick={(o) => pickSource(g, o.source)}
+                        onType={(q) => setGroupSource(g, { lotId: null, noLot: false, sourceItemId: null, sourceQuery: q })}
+                        onPick={(o) => pickLot(g, o.lot)}
                         right={(o) =>
-                          o.source && (
+                          o.lot && (
                             <span className="text-right text-xs text-slate-500">
                               ทุนคงเหลือ
-                              <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.source.remaining)}</span>
+                              <span className="block text-sm font-semibold text-brand-700 tabular-nums">{fmtMoney(o.lot.remaining)}</span>
                             </span>
                           )
                         }
                       />
                     </div>
                   </div>
-                  {src && (
+                  {lot && (
                     <p className="mt-1.5 px-1 text-xs text-slate-500">
-                      ทุนคงเหลือ {fmtMoney(src.remaining)} → หลังบันทึก{" "}
-                      {after >= 0 ? <b className="text-slate-700">{fmtMoney(after)}</b> : <b className="text-up">คืนทุนแล้ว กำไร +{fmtMoney(-after)}</b>}
+                      {lot.items.length} รายการใน LOT · ทุนคงเหลือ {fmtMoney(lot.remaining)} → หลังบันทึก{" "}
+                      {after >= 0 ? <b className="text-slate-700 tabular-nums">{fmtMoney(after)}</b> : <b className="text-up">คืนทุนแล้ว กำไร +{fmtMoney(-after)}</b>}
+                    </p>
+                  )}
+                  {first.noLot && (
+                    <p className="mt-1.5 px-1 text-xs text-slate-500">
+                      เลือกสินค้าจาก LOT ไหนก็ได้ หรือพิมพ์ชื่อ ระบบหา LOT ที่มีสินค้านั้นให้ (เปลี่ยนได้ที่ “หักทุนจาก”) · สินค้าที่ไม่อยู่ใน LOT ใด = ยอดรวมสินค้าไม่มี LOT
                     </p>
                   )}
                   <div className="mt-2 divide-y divide-slate-200/70 rounded-lg bg-white px-2 ring-1 ring-slate-100">

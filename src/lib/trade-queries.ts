@@ -118,6 +118,7 @@ export type SourceOption = {
   lotNo: string;
   lotNote: string | null;
   customerName: string | null;
+  productId: number | null;
   title: string;
   unitName: string | null;
   qty: number;
@@ -130,7 +131,7 @@ export type SourceOption = {
 /** Purchase lines a sale can be deducted from: open lots, plus lines the edited sale already uses. */
 export async function getSourceOptions(excludeSaleId = 0): Promise<SourceOption[]> {
   const rows = await db.execute<Record<string, unknown>>(sql`
-    select i.id, b.id as lot_id, b.lot_no, b.lot_note, b.customer_name, i.title, i.unit_name, i.qty, i.amount,
+    select i.id, b.id as lot_id, b.lot_no, b.lot_note, b.customer_name, i.product_id, i.title, i.unit_name, i.qty, i.amount,
            coalesce((select sum(si.amount) from sale_items si where si.source_item_id = i.id and si.sale_id <> ${excludeSaleId}), 0) as sold
     from bill_items i join bills b on b.id = i.bill_id
     where b.lot_closed_at is null
@@ -146,6 +147,7 @@ export async function getSourceOptions(excludeSaleId = 0): Promise<SourceOption[
       lotNo: r.lot_no as string,
       lotNote: r.lot_note as string | null,
       customerName: r.customer_name as string | null,
+      productId: r.product_id as number | null,
       title: r.title as string,
       unitName: r.unit_name as string | null,
       qty: Number(r.qty),

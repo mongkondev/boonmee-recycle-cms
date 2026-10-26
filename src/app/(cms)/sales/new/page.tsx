@@ -21,7 +21,7 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
     <>
       <TradeForm
         title="ขายออก / รายรับ"
-        description="เลือก LOT ครั้งเดียว แล้วเพิ่มของที่ขายจริงได้หลายรายการ เช่น ทองแดง เหล็ก จาก LOT ตู้เย็น · ยอดขายหักทุนคงเหลือของ LOT"
+        description="เลือก LOT แล้วเพิ่มแถวเลือกของใน LOT นั้น หรือ “ไม่ระบุ LOT” แล้วระบบหา LOT จากสินค้าให้ · ยอดขายหักทุนคงเหลือของ LOT อัตโนมัติ"
         mode="sell"
         products={products}
         sources={sources}
@@ -33,7 +33,7 @@ export default async function NewSalePage({ searchParams }: { searchParams: Prom
           date: bangkokToday(),
           paymentMethod: "cash",
           note: "",
-          rows: first ? [{ sourceItemId: first.id, productId: null, title: "", unitName: "", qty: "", unitPrice: "" }] : [],
+          rows: first ? [{ lotId: first.lotId, sourceItemId: sources.filter((s) => s.lotId === first.lotId).length === 1 ? first.id : null, productId: null, title: "", unitName: "", qty: "", unitPrice: "" }] : [],
         }}
       />
     </>
