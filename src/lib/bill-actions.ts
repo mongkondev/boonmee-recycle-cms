@@ -1,14 +1,13 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { requireUser } from "./auth";
-import { BILL_MAX_ROWS } from "./bill";
+import { BILL_MAX_ROWS, bangkokDay } from "./bill";
 import type { ActionResult } from "./actions";
 
-const bangkokDay = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 const round = (n: number, d: number) => Math.round(n * 10 ** d) / 10 ** d;
 
 const itemSchema = z.object({
@@ -24,6 +23,8 @@ const billSchema = z.object({
   customerName: z.string().trim().max(120).optional().transform((v) => v || null),
   billDate: z.string().date("วันที่ไม่ถูกต้อง"),
   paymentMethod: z.enum(["cash", "transfer"]),
+  // false = record the purchase only; the bill can be issued later
+  issueBill: z.boolean(),
   note: z.string().trim().max(500).optional().transform((v) => v || null),
   items: z.array(itemSchema).min(1, "กรุณาเพิ่มอย่างน้อย 1 รายการ").max(BILL_MAX_ROWS, `บิลหนึ่งใบใส่ได้ไม่เกิน ${BILL_MAX_ROWS} รายการ`),
 });
@@ -39,7 +40,7 @@ export async function saveBill(input: BillInput): Promise<ActionResult<{ id: num
     const line = issue.path[0] === "items" && typeof issue.path[1] === "number" ? `แถวที่ ${issue.path[1] + 1}: ` : "";
     return { ok: false, error: line + issue.message };
   }
-  const { id, items, billDate, ...head } = parsed.data;
+  const { id, items, billDate, issueBill, ...head } = parsed.data;
   const lines = items.map((it, i) => {
     const qty = round(it.qty, 3);
     const unitPrice = round(it.unitPrice, 2);
@@ -71,15 +72,34 @@ export async function saveBill(input: BillInput): Promise<ActionResult<{ id: num
       billId = row.id;
     }
     await tx.insert(schema.billItems).values(lines.map((l) => ({ ...l, billId: billId! })));
+    if (issueBill) await assignBillNo(tx, billId);
     return billId;
   });
-  revalidatePath("/bills");
+  for (const p of ["/bills", "/", "/stock", "/reports"]) revalidatePath(p);
   return { ok: true, data: { id: savedId } };
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Give the purchase the next bill number (no-op when it already has one). */
+async function assignBillNo(tx: Tx, id: number) {
+  await tx.execute(sql`lock table bills in share row exclusive mode`);
+  await tx.execute(sql`
+    update bills set bill_no = (select coalesce(max(bill_no), 0) + 1 from bills) where id = ${id} and bill_no is null
+  `);
+}
+
+/** Issue the bill for a purchase that was recorded without one. */
+export async function issueBill(id: number): Promise<ActionResult> {
+  await requireUser();
+  await db.transaction((tx) => assignBillNo(tx, id));
+  for (const p of ["/bills", "/", "/stock", "/reports"]) revalidatePath(p);
+  return { ok: true };
 }
 
 export async function deleteBill(id: number): Promise<ActionResult> {
   await requireUser();
   await db.delete(schema.bills).where(eq(schema.bills.id, id));
-  revalidatePath("/bills");
+  for (const p of ["/bills", "/", "/stock", "/reports"]) revalidatePath(p);
   return { ok: true };
 }

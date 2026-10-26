@@ -36,6 +36,20 @@
       "when": 1792986140232,
       "tag": "0004_bills",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792986802980,
+      "tag": "0005_sales_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792986818115,
+      "tag": "0006_bill_no",
+      "breakpoints": true
     }
   ]
 }

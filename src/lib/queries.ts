@@ -202,16 +202,17 @@ export async function getBills(search = "", limit = 200) {
   const q = search.trim();
   const like = `%${q}%`;
   const rows = await db.execute<Record<string, unknown>>(sql`
-    select b.id, b.customer_name, b.bill_date, b.payment_method, b.total,
+    select b.id, b.bill_no, b.customer_name, b.bill_date, b.payment_method, b.total,
            (select count(*)::int from bill_items i where i.bill_id = b.id) as item_count,
            coalesce(u.display_name, u.email, u.username) as created_by
     from bills b left join users u on u.id = b.created_by
-    ${q ? sql`where b.customer_name ilike ${like} or b.id::text = ${q.replace(/^#?0*/, "")}
+    ${q ? sql`where b.customer_name ilike ${like} or b.bill_no::text = ${q.replace(/^#?0*/, "")}
       or exists (select 1 from bill_items i where i.bill_id = b.id and i.title ilike ${like})` : sql``}
     order by b.bill_date desc, b.id desc limit ${limit}
   `);
   return rows.map((r) => ({
     id: r.id as number,
+    billNo: r.bill_no as number | null,
     customerName: r.customer_name as string | null,
     billDate: new Date(r.bill_date as string).toISOString(),
     paymentMethod: r.payment_method as "cash" | "transfer",
@@ -231,6 +232,7 @@ export async function getBill(id: number) {
     .orderBy(asc(schema.billItems.lineNo));
   return {
     id: bill.id,
+    billNo: bill.billNo,
     customerName: bill.customerName,
     billDate: bill.billDate.toISOString(),
     paymentMethod: bill.paymentMethod,
@@ -255,7 +257,8 @@ export async function getBillProducts() {
   return rows
     .filter((p) => p.isActive && p.mainActive && p.subActive)
     .map((p) => ({
-      id: p.id,
+      key: `p${p.id}|${p.unitName ?? ""}`,
+      productId: p.id as number | null,
       title: p.title,
       group: p.subName ? `${p.mainName} › ${p.subName}` : p.mainName,
       unitName: p.unitName,

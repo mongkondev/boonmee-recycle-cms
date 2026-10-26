@@ -14,11 +14,11 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeader
-        title="บิลเงินสดรับซื้อ"
-        description="บิล A5 สำหรับส่งให้ลูกค้า เป็นรูปหรือ PDF"
+        title="รับซื้อเข้า / บิลเงินสด"
+        description="ทุกรายการรับซื้อเข้าสต็อก · ออกบิล A5 ส่งลูกค้าเป็นรูปหรือ PDF ได้ทันทีหรือทีหลัง"
         actions={
           <Link href="/bills/new" className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm hover:bg-brand-600">
-            <Plus className="size-4" /> สร้างบิล
+            <Plus className="size-4" /> รับซื้อ / สร้างบิล
           </Link>
         }
       />
@@ -50,14 +50,18 @@ export default async function BillsPage({ searchParams }: { searchParams: Promis
               <tr>
                 <td colSpan={5} className="py-16 text-center text-slate-400">
                   <ReceiptText className="mx-auto mb-3 size-8" />
-                  {q ? "ไม่พบบิลที่ค้นหา" : "ยังไม่มีบิล — กด 'สร้างบิล' เพื่อเริ่ม"}
+                  {q ? "ไม่พบบิลที่ค้นหา" : "ยังไม่มีรายการรับซื้อ"}
                 </td>
               </tr>
             )}
             {bills.map((b) => (
               <tr key={b.id} className="hover:bg-slate-50/70">
                 <td className="px-4 py-2.5">
-                  <Link href={`/bills/${b.id}`} className="font-semibold text-brand-700 tabular-nums hover:underline">{fmtBillNo(b.id)}</Link>
+                  {b.billNo ? (
+                    <Link href={`/bills/${b.id}`} className="font-semibold text-brand-700 tabular-nums hover:underline">{fmtBillNo(b.billNo)}</Link>
+                  ) : (
+                    <Link href={`/bills/${b.id}`} className="rounded-full bg-amber-50 px-2 py-0.5 text-xs whitespace-nowrap text-amber-700 ring-1 ring-amber-200">ยังไม่ออกบิล</Link>
+                  )}
                 </td>
                 <td className="px-3 py-2.5">
                   <Link href={`/bills/${b.id}`} className="block">

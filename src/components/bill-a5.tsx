@@ -57,7 +57,7 @@ export const BillA5 = forwardRef<HTMLDivElement, { bill: BillDetail; settings: S
         </div>
         <div className="flex gap-2">
           <span className="text-[#4b5d52]">เลขที่</span>
-          <span className="font-semibold tabular-nums">{fmtBillNo(bill.id)}</span>
+          <span className="font-semibold tabular-nums">{bill.billNo ? fmtBillNo(bill.billNo) : "—"}</span>
         </div>
         <div />
         <div className="flex gap-2">

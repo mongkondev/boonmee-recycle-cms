@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { fmtBillNo } from "@/lib/bill";
 import { getBill, getBillProducts } from "@/lib/queries";
-import { BillForm } from "../../bill-form";
+import { TradeForm } from "@/components/trade-form";
 
 export const metadata = { title: "แก้ไขบิล" };
 
@@ -12,13 +12,15 @@ export default async function EditBillPage({ params }: { params: Promise<{ id: s
   if (!bill) notFound();
   return (
     <>
-      <PageHeader title={`แก้ไขบิล เลขที่ ${fmtBillNo(bill.id)}`} />
-      <BillForm
-        products={products}
+      <PageHeader title={bill.billNo ? `แก้ไขบิล เลขที่ ${fmtBillNo(bill.billNo)}` : `แก้ไขรายการรับซื้อ #${bill.id}`} />
+      <TradeForm
+        mode="buy"
+        options={products}
         initial={{
           id: bill.id,
-          customerName: bill.customerName ?? "",
-          billDate: new Date(bill.billDate).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
+          hasBillNo: bill.billNo !== null,
+          party: bill.customerName ?? "",
+          date: new Date(bill.billDate).toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
           paymentMethod: bill.paymentMethod,
           note: bill.note ?? "",
           rows: bill.items.map((i) => ({

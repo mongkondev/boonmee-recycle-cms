@@ -7,8 +7,12 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  HandCoins,
+  LayoutDashboard,
   Package,
   ReceiptText,
+  Boxes,
+  ChartColumn,
   Ruler,
   Settings,
   TrendingUp,
@@ -21,7 +25,17 @@ import { useEffect, useState } from "react";
 import { logoutAction } from "@/app/login/actions";
 import { cn } from "./ui";
 
-const NAV: { group: string; items: { href: string; label: string; icon: typeof Settings; superOnly?: boolean }[] }[] = [
+const NAV: { group: string; items: { href: string; label: string; icon: typeof Settings; superOnly?: boolean; exact?: boolean }[] }[] = [
+  {
+    group: "ซื้อ-ขาย",
+    items: [
+      { href: "/", label: "ภาพรวม", icon: LayoutDashboard, exact: true },
+      { href: "/bills", label: "รับซื้อเข้า / บิลเงินสด", icon: ReceiptText },
+      { href: "/sales", label: "ขายออก / รายรับ", icon: HandCoins },
+      { href: "/stock", label: "สต็อกคงเหลือ", icon: Boxes },
+      { href: "/reports", label: "รายงาน", icon: ChartColumn },
+    ],
+  },
   {
     group: "ราคา",
     items: [
@@ -30,10 +44,6 @@ const NAV: { group: string; items: { href: string; label: string; icon: typeof S
       { href: "/history", label: "ประวัติราคา", icon: History },
       { href: "/export", label: "เมนูราคา", icon: FileImage },
     ],
-  },
-  {
-    group: "บิล",
-    items: [{ href: "/bills", label: "บิลเงินสดรับซื้อ", icon: ReceiptText }],
   },
   {
     group: "ข้อมูลหลัก",
@@ -58,7 +68,8 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
-  const current = ALL.find((i) => pathname.startsWith(i.href));
+  const isActive = (i: { href: string; exact?: boolean }) => (i.exact ? pathname === i.href : pathname.startsWith(i.href));
+  const current = ALL.find(isActive);
 
   return (
     <div className="min-h-dvh lg:pl-64">
@@ -85,8 +96,9 @@ export function Shell({ user, children }: { user: { name: string; role: "super" 
             <div key={g.group}>
               <div className="mb-2 px-3 text-xs font-medium tracking-wider text-brand-200/50 uppercase">{g.group}</div>
               <ul className="space-y-1">
-                {g.items.filter((i) => !i.superOnly || user.role === "super").map(({ href, label, icon: Icon }) => {
-                  const active = pathname.startsWith(href);
+                {g.items.filter((i) => !i.superOnly || user.role === "super").map((item) => {
+                  const { href, label, icon: Icon } = item;
+                  const active = isActive(item);
                   return (
                     <li key={href}>
                       <Link

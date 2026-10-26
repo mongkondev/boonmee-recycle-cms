@@ -166,6 +166,8 @@ export const invitations = pgTable("invitations", {
 /** บิลเงินสดรับซื้อ — what the shop paid a customer for the scrap they brought in. */
 export const bills = pgTable("bills", {
   id: serial("id").primaryKey(),
+  // every row is a purchase (stock in); the printed bill number is given only once a bill is issued
+  billNo: integer("bill_no").unique(),
   customerName: text("customer_name"),
   billDate: timestamp("bill_date", { withTimezone: true }).notNull().defaultNow(),
   paymentMethod: text("payment_method", { enum: ["cash", "transfer"] }).notNull().default("cash"),
@@ -193,4 +195,64 @@ export const billItems = pgTable(
     amount: money("amount").notNull(),
   },
   (t) => [index("bill_items_bill_idx").on(t.billId, t.lineNo)],
+);
+
+/** ขายออก — selling stock that was bought in (whole or split into parts) to a buyer / factory. */
+export const sales = pgTable("sales", {
+  id: serial("id").primaryKey(),
+  buyerName: text("buyer_name"),
+  saleDate: timestamp("sale_date", { withTimezone: true }).notNull().defaultNow(),
+  paymentMethod: text("payment_method", { enum: ["cash", "transfer"] }).notNull().default("cash"),
+  total: money("total").notNull().default(0),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const saleItems = pgTable(
+  "sale_items",
+  {
+    id: serial("id").primaryKey(),
+    saleId: integer("sale_id")
+      .notNull()
+      .references(() => sales.id, { onDelete: "cascade" }),
+    lineNo: integer("line_no").notNull(),
+    // stock is matched by (product_id or title) + unit, same as bill_items
+    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    unitName: text("unit_name"),
+    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }).notNull(),
+    unitPrice: money("unit_price").notNull(),
+    amount: money("amount").notNull(),
+  },
+  (t) => [index("sale_items_sale_idx").on(t.saleId, t.lineNo)],
+);
+
+/** Stock moves that are neither a purchase nor a sale, e.g. แยกชิ้นส่วน: one item out, its parts in. */
+export const stockAdjustments = pgTable("stock_adjustments", {
+  id: serial("id").primaryKey(),
+  adjDate: timestamp("adj_date", { withTimezone: true }).notNull().defaultNow(),
+  kind: text("kind", { enum: ["dismantle"] }).notNull().default("dismantle"),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stockAdjustmentItems = pgTable(
+  "stock_adjustment_items",
+  {
+    id: serial("id").primaryKey(),
+    adjustmentId: integer("adjustment_id")
+      .notNull()
+      .references(() => stockAdjustments.id, { onDelete: "cascade" }),
+    productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    unitName: text("unit_name"),
+    // negative = taken out of stock, positive = put into stock
+    qty: numeric("qty", { precision: 12, scale: 3, mode: "number" }).notNull(),
+    // cost carried by the move (negative on the way out)
+    cost: money("cost").notNull(),
+  },
+  (t) => [index("stock_adjustment_items_adj_idx").on(t.adjustmentId)],
 );
